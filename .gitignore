@@ -1,0 +1,17 @@
+# local session guide
+CLAUDE.md
+
+# dependencies and build output
+node_modules/
+
+# third-party corpus: fetch it with the instructions in experiments/m0/corpus/SOURCE.md
+experiments/m0/corpus/plausible/
+
+# regenerable experiment artefacts
+experiments/m0/results/cache/
+experiments/m0/results/*.sqlite
+
+# local noise
+.DS_Store
+.env
+.env.*

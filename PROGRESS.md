@@ -42,10 +42,10 @@ _Last updated: 2026-09-22_
 - [ ] Retest the defaults on a real customer corpus when one is available
 - [x] ~~Test weighted RRF~~ (done: repairs hit@5, not top-1 → reranker stays, D-017)
 - [ ] Measure API embedders (OpenAI, Voyage) against the local default
-- [ ] Put the project on GitHub (`obchain`), README on `main`, work on `dev`
+- [x] **GitHub: https://github.com/obchain/openrag** (public, account `obchain`). `main` holds the README only; `dev` exists **locally** and is not pushed yet
+- [ ] Decide what gets pushed to `dev` (planning docs, M0 experiments) before publishing them
 - [ ] Resolve remaining open decisions (below)
 - [ ] Turn PLAN.md draft milestones into concrete, sized milestones
-- [ ] `git init` + repo setup
 
 ## Open decisions
 

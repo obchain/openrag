@@ -1,0 +1,497 @@
+{
+ "topVector": {
+  "best": {
+   "th": 0.6996698722636836,
+   "bal": 0.6746031746031746,
+   "refusedUnanswerable": 0.7777777777777778,
+   "keptAnswerable": 0.5714285714285714
+  },
+  "answerable": [
+   0.5591892449750855,
+   0.5617767560705413,
+   0.5734759431985523,
+   0.6070747786884407,
+   0.6147904614961117,
+   0.6169327893497165,
+   0.6178950598613948,
+   0.6214114238268778,
+   0.6501803016284882,
+   0.6525988083329821,
+   0.6602653027638326,
+   0.6616176901102602,
+   0.6770485559954107,
+   0.6776787490069704,
+   0.6812091541455896,
+   0.6855713068817533,
+   0.6884439724950582,
+   0.694087610865834,
+   0.6996698722636836,
+   0.7005755796155864,
+   0.7062996384385585,
+   0.7082538605945672,
+   0.7166957585186946,
+   0.7175130834328609,
+   0.7186286616612776,
+   0.7256358331480612,
+   0.7265286270043401,
+   0.7302496718556313,
+   0.7341838307191892,
+   0.7533707695196892,
+   0.7552436949496251,
+   0.7675203223911637,
+   0.7702999633540326,
+   0.780275847878583,
+   0.7831192694077274,
+   0.7859943231198638,
+   0.7918068200490733,
+   0.8069187979885726,
+   0.8262082896188119,
+   0.8466207668370771,
+   0.8484252064094573,
+   0.88577898973795
+  ],
+  "unanswerable": [
+   0.5402650211140099,
+   0.5595850008237164,
+   0.6612150488125508,
+   0.6678340642298348,
+   0.6697266297485367,
+   0.6977126472320379,
+   0.6996391518327822,
+   0.722906925045633,
+   0.7733656004317719
+  ],
+  "safe": {
+   "th": 0.5734759431985523,
+   "refusedUnanswerable": 0.2222222222222222,
+   "keptAnswerable": 0.9523809523809523
+  }
+ },
+ "topRerank": {
+  "best": {
+   "th": 4.860577583312988,
+   "bal": 0.6666666666666666,
+   "refusedUnanswerable": 1,
+   "keptAnswerable": 0.3333333333333333
+  },
+  "answerable": [
+   -11.09143352508545,
+   -10.885517120361328,
+   -10.780789375305176,
+   -10.419485092163086,
+   -8.384074211120605,
+   -7.7663068771362305,
+   -7.636201858520508,
+   -6.540621280670166,
+   -5.902195453643799,
+   -5.6353983879089355,
+   -5.200677871704102,
+   -4.887085437774658,
+   -4.102153778076172,
+   -3.429535388946533,
+   -3.2605812549591064,
+   -3.059096336364746,
+   -3.040294647216797,
+   -2.789093017578125,
+   -2.650219202041626,
+   -2.1496169567108154,
+   -1.8298218250274658,
+   -0.5383095145225525,
+   0.22992686927318573,
+   1.4315252304077148,
+   1.4851551055908203,
+   1.7604327201843262,
+   2.233316421508789,
+   3.1990976333618164,
+   4.860577583312988,
+   5.5072340965271,
+   5.848757743835449,
+   5.854395866394043,
+   6.038158893585205,
+   6.385665416717529,
+   6.43781852722168,
+   6.561991214752197,
+   6.777196884155273,
+   6.969741344451904,
+   7.159506797790527,
+   7.225377559661865,
+   7.587374687194824,
+   8.818953514099121
+  ],
+  "unanswerable": [
+   -11.043135643005371,
+   -11.038406372070312,
+   -10.968243598937988,
+   -5.137722969055176,
+   -3.2604074478149414,
+   -1.9576079845428467,
+   -1.1634923219680786,
+   1.5123392343521118,
+   3.3164920806884766
+  ],
+  "safe": {
+   "th": -10.780789375305176,
+   "refusedUnanswerable": 0.3333333333333333,
+   "keptAnswerable": 0.9523809523809523
+  }
+ },
+ "signals": [
+  {
+   "id": "E01",
+   "type": "exact",
+   "answerable": true,
+   "topVector": 0.780275847878583,
+   "topRerank": 6.038158893585205
+  },
+  {
+   "id": "E02",
+   "type": "exact",
+   "answerable": true,
+   "topVector": 0.7702999633540326,
+   "topRerank": 4.860577583312988
+  },
+  {
+   "id": "E03",
+   "type": "exact",
+   "answerable": true,
+   "topVector": 0.8262082896188119,
+   "topRerank": 7.587374687194824
+  },
+  {
+   "id": "E04",
+   "type": "exact",
+   "answerable": true,
+   "topVector": 0.8466207668370771,
+   "topRerank": 6.777196884155273
+  },
+  {
+   "id": "E05",
+   "type": "exact",
+   "answerable": true,
+   "topVector": 0.7918068200490733,
+   "topRerank": 6.43781852722168
+  },
+  {
+   "id": "E06",
+   "type": "exact",
+   "answerable": true,
+   "topVector": 0.7831192694077274,
+   "topRerank": 6.969741344451904
+  },
+  {
+   "id": "E07",
+   "type": "exact",
+   "answerable": true,
+   "topVector": 0.7302496718556313,
+   "topRerank": 2.233316421508789
+  },
+  {
+   "id": "E08",
+   "type": "exact",
+   "answerable": true,
+   "topVector": 0.7341838307191892,
+   "topRerank": 6.385665416717529
+  },
+  {
+   "id": "E09",
+   "type": "exact",
+   "answerable": true,
+   "topVector": 0.8069187979885726,
+   "topRerank": 6.561991214752197
+  },
+  {
+   "id": "E10",
+   "type": "exact",
+   "answerable": true,
+   "topVector": 0.7533707695196892,
+   "topRerank": 7.225377559661865
+  },
+  {
+   "id": "E11",
+   "type": "exact",
+   "answerable": true,
+   "topVector": 0.7552436949496251,
+   "topRerank": 7.159506797790527
+  },
+  {
+   "id": "E12",
+   "type": "exact",
+   "answerable": true,
+   "topVector": 0.88577898973795,
+   "topRerank": 8.818953514099121
+  },
+  {
+   "id": "E13",
+   "type": "exact",
+   "answerable": true,
+   "topVector": 0.7082538605945672,
+   "topRerank": 3.1990976333618164
+  },
+  {
+   "id": "E14",
+   "type": "exact",
+   "answerable": true,
+   "topVector": 0.8484252064094573,
+   "topRerank": 5.848757743835449
+  },
+  {
+   "id": "E15",
+   "type": "exact",
+   "answerable": true,
+   "topVector": 0.7859943231198638,
+   "topRerank": 5.5072340965271
+  },
+  {
+   "id": "P01",
+   "type": "paraphrase",
+   "answerable": true,
+   "topVector": 0.7675203223911637,
+   "topRerank": 0.22992686927318573
+  },
+  {
+   "id": "P02",
+   "type": "paraphrase",
+   "answerable": true,
+   "topVector": 0.6884439724950582,
+   "topRerank": -3.429535388946533
+  },
+  {
+   "id": "P03",
+   "type": "paraphrase",
+   "answerable": true,
+   "topVector": 0.7265286270043401,
+   "topRerank": 1.4315252304077148
+  },
+  {
+   "id": "P04",
+   "type": "paraphrase",
+   "answerable": true,
+   "topVector": 0.694087610865834,
+   "topRerank": -3.2605812549591064
+  },
+  {
+   "id": "P05",
+   "type": "paraphrase",
+   "answerable": true,
+   "topVector": 0.7005755796155864,
+   "topRerank": -4.102153778076172
+  },
+  {
+   "id": "P06",
+   "type": "paraphrase",
+   "answerable": true,
+   "topVector": 0.6855713068817533,
+   "topRerank": -0.5383095145225525
+  },
+  {
+   "id": "P07",
+   "type": "paraphrase",
+   "answerable": true,
+   "topVector": 0.6812091541455896,
+   "topRerank": -2.789093017578125
+  },
+  {
+   "id": "P08",
+   "type": "paraphrase",
+   "answerable": true,
+   "topVector": 0.6501803016284882,
+   "topRerank": -10.419485092163086
+  },
+  {
+   "id": "P09",
+   "type": "paraphrase",
+   "answerable": true,
+   "topVector": 0.6776787490069704,
+   "topRerank": 1.7604327201843262
+  },
+  {
+   "id": "P10",
+   "type": "paraphrase",
+   "answerable": true,
+   "topVector": 0.7256358331480612,
+   "topRerank": 1.4851551055908203
+  },
+  {
+   "id": "P11",
+   "type": "paraphrase",
+   "answerable": true,
+   "topVector": 0.7062996384385585,
+   "topRerank": -3.059096336364746
+  },
+  {
+   "id": "P12",
+   "type": "paraphrase",
+   "answerable": true,
+   "topVector": 0.6770485559954107,
+   "topRerank": -1.8298218250274658
+  },
+  {
+   "id": "P13",
+   "type": "paraphrase",
+   "answerable": true,
+   "topVector": 0.6996698722636836,
+   "topRerank": -7.636201858520508
+  },
+  {
+   "id": "P14",
+   "type": "paraphrase",
+   "answerable": true,
+   "topVector": 0.7186286616612776,
+   "topRerank": 5.854395866394043
+  },
+  {
+   "id": "P15",
+   "type": "paraphrase",
+   "answerable": true,
+   "topVector": 0.7175130834328609,
+   "topRerank": -2.1496169567108154
+  },
+  {
+   "id": "H01",
+   "type": "hinglish",
+   "answerable": true,
+   "topVector": 0.5734759431985523,
+   "topRerank": -6.540621280670166
+  },
+  {
+   "id": "H02",
+   "type": "hinglish",
+   "answerable": true,
+   "topVector": 0.6616176901102602,
+   "topRerank": -7.7663068771362305
+  },
+  {
+   "id": "H03",
+   "type": "hinglish",
+   "answerable": true,
+   "topVector": 0.6602653027638326,
+   "topRerank": -4.887085437774658
+  },
+  {
+   "id": "H04",
+   "type": "hinglish",
+   "answerable": true,
+   "topVector": 0.6178950598613948,
+   "topRerank": -10.780789375305176
+  },
+  {
+   "id": "H05",
+   "type": "hinglish",
+   "answerable": true,
+   "topVector": 0.6169327893497165,
+   "topRerank": -5.902195453643799
+  },
+  {
+   "id": "H06",
+   "type": "hinglish",
+   "answerable": true,
+   "topVector": 0.6214114238268778,
+   "topRerank": -5.6353983879089355
+  },
+  {
+   "id": "H07",
+   "type": "hinglish",
+   "answerable": true,
+   "topVector": 0.5591892449750855,
+   "topRerank": -8.384074211120605
+  },
+  {
+   "id": "H08",
+   "type": "hinglish",
+   "answerable": true,
+   "topVector": 0.7166957585186946,
+   "topRerank": -3.040294647216797
+  },
+  {
+   "id": "H09",
+   "type": "hinglish",
+   "answerable": true,
+   "topVector": 0.6525988083329821,
+   "topRerank": -5.200677871704102
+  },
+  {
+   "id": "H10",
+   "type": "hinglish",
+   "answerable": true,
+   "topVector": 0.5617767560705413,
+   "topRerank": -10.885517120361328
+  },
+  {
+   "id": "H11",
+   "type": "hinglish",
+   "answerable": true,
+   "topVector": 0.6147904614961117,
+   "topRerank": -2.650219202041626
+  },
+  {
+   "id": "H12",
+   "type": "hinglish",
+   "answerable": true,
+   "topVector": 0.6070747786884407,
+   "topRerank": -11.09143352508545
+  },
+  {
+   "id": "U01",
+   "type": "unanswerable",
+   "answerable": false,
+   "topVector": 0.6678340642298348,
+   "topRerank": -3.2604074478149414
+  },
+  {
+   "id": "U02",
+   "type": "unanswerable",
+   "answerable": false,
+   "topVector": 0.6697266297485367,
+   "topRerank": -11.043135643005371
+  },
+  {
+   "id": "U03",
+   "type": "unanswerable",
+   "answerable": false,
+   "topVector": 0.5402650211140099,
+   "topRerank": -11.038406372070312
+  },
+  {
+   "id": "U04",
+   "type": "unanswerable",
+   "answerable": false,
+   "topVector": 0.722906925045633,
+   "topRerank": -5.137722969055176
+  },
+  {
+   "id": "U05",
+   "type": "unanswerable",
+   "answerable": false,
+   "topVector": 0.6612150488125508,
+   "topRerank": -1.9576079845428467
+  },
+  {
+   "id": "U06",
+   "type": "unanswerable",
+   "answerable": false,
+   "topVector": 0.5595850008237164,
+   "topRerank": -10.968243598937988
+  },
+  {
+   "id": "U07",
+   "type": "unanswerable",
+   "answerable": false,
+   "topVector": 0.6977126472320379,
+   "topRerank": -1.1634923219680786
+  },
+  {
+   "id": "U08",
+   "type": "unanswerable",
+   "answerable": false,
+   "topVector": 0.6996391518327822,
+   "topRerank": 3.3164920806884766
+  },
+  {
+   "id": "U09",
+   "type": "unanswerable",
+   "answerable": false,
+   "topVector": 0.7733656004317719,
+   "topRerank": 1.5123392343521118
+  }
+ ]
+}

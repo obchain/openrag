@@ -384,6 +384,40 @@ _2026-09-22 · decided · evidence: `experiments/m0/RESULTS.md` §4_
 
 ---
 
+## D-019: Toolchain and repository layout (M0 scaffold)
+_2026-09-24 · decided_
+
+**Language, re-confirmed:** the shipped package is TypeScript; Python is used for tooling that is not shipped (`eval/`, and later a PDF service). This is D-005 as revisited, chosen deliberately over an all-Python project.
+
+**Layout:**
+```
+packages/openrag/     core package (private until O-4 is settled)
+packages/@openrag/*   add-ons, as they arrive (D-012)
+examples/             sample apps, starting with a Next.js chat (D-014)
+eval/                 Python benchmark harness (M6)
+experiments/m0/       the practice-corpus spikes that produced D-016…D-018
+```
+
+**Tools:**
+
+| Concern | Choice | Why |
+|---|---|---|
+| Workspace | pnpm workspaces | Needed for core + add-ons (D-012), and it's strict about phantom dependencies |
+| Language | TypeScript 5.9, strict, plus `noUncheckedIndexedAccess` | Catches the indexing mistakes that retrieval code invites |
+| Build | tsup (esbuild + dts) | One command to ESM + type declarations |
+| Tests | Vitest | Fast, ESM-native, no transform config |
+| Lint + format | Biome | One tool instead of ESLint + Prettier, and fast enough to run on every commit |
+| CI | GitHub Actions, Node 22 | Matches D-011 (Node only). Runs lint, typecheck, test, build |
+
+**Notes:**
+- No TypeScript project references or `composite` builds. They fought with tsup's declaration build for no benefit at this size; each package just runs `tsc --noEmit`.
+- `packages/openrag` is `"private": true` so nothing can be published by accident before O-4 (the name) is settled.
+- pnpm 11 blocks dependency install scripts by default; esbuild is allowed explicitly in `pnpm-workspace.yaml`, since that's how it fetches its platform binary.
+
+**First code in the package:** the interfaces from D-006…D-018, plus weighted RRF fusion with the measured default weights (D-017) and its tests. Everything else lands in M1 onwards.
+
+---
+
 ## Pending
 
 See the Open Decisions table in `PROGRESS.md`: O-2 target developer, O-3 positioning, O-4 publish name, O-5 providers, O-6 default store, O-7 open source vs SaaS, O-8 framework target customer, O-9 framework name, and A-1…A-9.

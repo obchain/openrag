@@ -30,6 +30,9 @@ _Last updated: 2026-09-22_
 
 ## Next
 
+- [x] **M0 scaffold done** (D-019): pnpm workspace, TypeScript strict, Vitest, Biome, tsup, GitHub Actions on Node 22. `packages/openrag` holds the interfaces plus weighted RRF fusion with tests; `pnpm lint typecheck test build` all pass
+- [ ] **M1 Ingestion:** loaders, Markdown/HTML parsing, heading-aware chunking (D-016), content hashing, incremental re-index
+
 - [x] ~~Architecture discussion: A-3…A-9~~ (D-007…D-013). A-1 and A-2 wait for M0
 - [x] **M0 practice run on public docs** (Plausible, 133 pages, 51 questions): `experiments/m0/RESULTS.md`. Leaning:
   - store = SQLite (keyword 76% vs Orama 43%, 3.5× smaller)

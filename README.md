@@ -220,7 +220,7 @@ The results will be published in `eval/results.md`, including the areas where op
 
 ## Roadmap
 
-openRag is the first layer of a wider chatbot framework: one that companies add to their website and that adapts to each company's data, rules and permissions. The framework is built bottom-up, and each layer ships and is useful on its own before the next one starts. See [`docs/VISION.md`](docs/VISION.md).
+openRag is the first layer of a wider chatbot framework: one that companies add to their website and that adapts to each company's data, rules and permissions. The framework is built bottom-up, and each layer ships and is useful on its own before the next one starts. See [`.claude/VISION.md`](.claude/VISION.md).
 
 - [ ] **Phase 0: Design** *(current)*. Architecture, API and default choices.
 - [ ] **Phase 1: Library**
@@ -249,9 +249,6 @@ openRag is the first layer of a wider chatbot framework: one that companies add 
 
 | Document | Contents |
 |---|---|
-| [`openrag-arch.html`](openrag-arch.html) | Visual architecture: every layer, the chat turn, the planner and the data model. Open it in a browser. |
+| [`docs/architecture.html`](docs/architecture.html) | Visual architecture: every layer, the chat turn, the planner and the data model. Open it in a browser. |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Layer design |
-| [`docs/VISION.md`](docs/VISION.md) | The wider chatbot framework and where openRag fits |
 | [`docs/PLAN.md`](docs/PLAN.md) | Phases, milestones and success criteria |
-| [`docs/DECISIONS.md`](docs/DECISIONS.md) | Design decisions and the reasoning behind them |
-| [`docs/RESEARCH.md`](docs/RESEARCH.md) | Landscape and prior art |

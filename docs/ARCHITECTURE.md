@@ -2,7 +2,7 @@
 
 _Status: **draft, under discussion.** Nothing here is decided yet except the language (TypeScript-first, D-005)._
 
-> **Visual version: [`../openrag-arch.html`](../openrag-arch.html).** It's more detailed than this file: the big picture (where openRag fits in the framework), diagrams for every part, the chat-turn sequence, the planner, the data model, the swappable-parts table, the open decisions A-1…A-9, and a glossary. It's written in plain language. Whenever an A-decision is locked, it gets written up here and in DECISIONS.md.
+> **Visual version: [`architecture.html`](architecture.html).** It's more detailed than this file: the big picture (where openRag fits in the framework), diagrams for every part, the chat-turn sequence, the planner, the data model, the swappable-parts table, the open decisions A-1…A-9, and a glossary. It's written in plain language. Whenever an A-decision is locked, it gets written up here and in DECISIONS.md.
 
 ## Proposed layers
 
@@ -60,7 +60,7 @@ bot = Bot(
 )
 ```
 
-(Examples above are Python-flavored and predate D-005. For the TypeScript API, see the "Public API" section of `openrag-arch.html`.)
+(Examples above are Python-flavored and predate D-005. For the TypeScript API, see the "Public API" section of `architecture.html`.)
 
 ## Tool surface (D-006)
 

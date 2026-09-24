@@ -407,7 +407,7 @@ experiments/m0/       the practice-corpus spikes that produced D-016…D-018
 | Build | tsup (esbuild + dts) | One command to ESM + type declarations |
 | Tests | Vitest | Fast, ESM-native, no transform config |
 | Lint + format | Biome | One tool instead of ESLint + Prettier, and fast enough to run on every commit |
-| CI | GitHub Actions, Node 22 | Matches D-011 (Node only). Runs lint, typecheck, test, build |
+| CI | **none for now** | Deferred until there is code worth gating. The same four checks run locally: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` |
 
 **Notes:**
 - No TypeScript project references or `composite` builds. They fought with tsup's declaration build for no benefit at this size; each package just runs `tsc --noEmit`.

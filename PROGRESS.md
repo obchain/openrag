@@ -30,7 +30,8 @@ _Last updated: 2026-09-22_
 
 ## Next
 
-- [x] **M0 scaffold done** (D-019): pnpm workspace, TypeScript strict, Vitest, Biome, tsup, GitHub Actions on Node 22. `packages/openrag` holds the interfaces plus weighted RRF fusion with tests; `pnpm lint typecheck test build` all pass
+- [x] **M0 scaffold done** (D-019): pnpm workspace, TypeScript strict, Vitest, Biome, tsup. `packages/openrag` holds the interfaces plus weighted RRF fusion with tests; `pnpm lint typecheck test build` all pass locally
+- [ ] Add CI later, once there is enough code to be worth gating
 - [ ] **M1 Ingestion:** loaders, Markdown/HTML parsing, heading-aware chunking (D-016), content hashing, incremental re-index
 
 - [x] ~~Architecture discussion: A-3…A-9~~ (D-007…D-013). A-1 and A-2 wait for M0

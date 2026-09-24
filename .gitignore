@@ -1,7 +1,3 @@
-# working notes: session guide and the planning log
-CLAUDE.md
-.claude/
-
 # dependencies and build output
 node_modules/
 

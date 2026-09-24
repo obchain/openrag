@@ -82,7 +82,7 @@ reply.citations;  // [{ uri: "docs/refunds.md", heading: "Refunds › Window", s
 ```ts
 const bot = new Bot({
   sources: ["./docs", "https://docs.example.com"],
-  llm: anthropic("claude-opus-5"),
+  llm: myModel, // any AI SDK model, or your own adapter
   store: pgvector(process.env.DATABASE_URL),
   abstain: true,
 });
@@ -220,7 +220,7 @@ The results will be published in `eval/results.md`, including the areas where op
 
 ## Roadmap
 
-openRag is the first layer of a wider chatbot framework: one that companies add to their website and that adapts to each company's data, rules and permissions. The framework is built bottom-up, and each layer ships and is useful on its own before the next one starts. See [`.claude/VISION.md`](.claude/VISION.md).
+openRag is the first layer of a wider chatbot framework: one that companies add to their website and that adapts to each company's data, rules and permissions. The framework is built bottom-up, and each layer ships and is useful on its own before the next one starts.
 
 - [ ] **Phase 0: Design** *(current)*. Architecture, API and default choices.
 - [ ] **Phase 1: Library**

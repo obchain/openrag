@@ -252,7 +252,7 @@ reply.citations   <span class="c">// [{ uri: "docs/refunds.md", heading: "Refund
   <p class="small muted">Instead of waiting for the full answer, you get small events as they happen: what the bot decided, each word, each source. <code>session</code> tells openRag which user's conversation this is.</p>
 <pre>const bot = new Bot({
   sources: ["./docs", "https://docs.example.com"],
-  llm: anthropic("claude-opus-5"),
+  llm: myModel, <span class="c">// any AI SDK model, or your own adapter</span>
   store: pgvector(process.env.DATABASE_URL),
   abstain: true,
 });
@@ -627,7 +627,7 @@ flowchart TD
   <div class="tablewrap"><table>
     <tr><th>Word</th><th>Meaning</th></tr>
     <tr><td><b>RAG</b></td><td>Retrieval-Augmented Generation. First find the right pieces of your docs, then let the LLM answer using them.</td></tr>
-    <tr><td><b>LLM</b></td><td>The AI model that writes the answer, e.g. Claude, GPT, or a local model.</td></tr>
+    <tr><td><b>LLM</b></td><td>The model that writes the answer: a hosted one reached through an API, or one running on your own machine.</td></tr>
     <tr><td><b>Chunk / piece</b></td><td>A small part of a document, a few paragraphs long. Search works on pieces, not whole files.</td></tr>
     <tr><td><b>Embedding</b></td><td>A list of numbers that captures what a piece of text means. Texts with similar meaning get similar numbers.</td></tr>
     <tr><td><b>Embedder</b></td><td>The model that turns text into embeddings.</td></tr>

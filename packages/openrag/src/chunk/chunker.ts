@@ -109,15 +109,14 @@ export function chunkDocument(
   };
 
   for (const piece of pieces(parsed, budgetFor, count)) {
-    const pieceTokens = count(piece.text);
     if (pending.length === 0) {
-      start(piece, pieceTokens);
+      start(piece, count(piece.text));
       continue;
     }
     const sameSection = (pending[0] as Piece).headingPath.join("\u0000") === piece.headingPath.join("\u0000");
     if (!sameSection) {
       flush();
-      start(piece, pieceTokens);
+      start(piece, count(piece.text));
       continue;
     }
 
@@ -129,7 +128,9 @@ export function chunkDocument(
      * once per chunk. So while the sum still fits, the real count certainly
      * does, and only a sum that overflows is worth an exact recount.
      */
-    const sum = pendingTokens + pieceTokens;
+    // Counted with the blank line that joins it on, or the separators add up
+    // into a chunk a token or two over budget.
+    const sum = pendingTokens + count(`\n\n${piece.text}`);
     if (sum <= budgetFor(piece.headingPath)) {
       pending.push(piece);
       pendingText = `${pendingText}\n\n${piece.text}`;
@@ -145,7 +146,7 @@ export function chunkDocument(
       pendingTokens = mergedTokens;
     } else {
       flush();
-      start(piece, pieceTokens);
+      start(piece, count(piece.text));
     }
   }
   flush();

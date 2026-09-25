@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { chunkDocument, embedText } from "../src/chunk/chunker.js";
+import { estimateTokens } from "../src/chunk/tokens.js";
 import { parseMarkdown } from "../src/parse/markdown.js";
 import type { SourceDocument } from "../src/types.js";
 
@@ -137,5 +138,25 @@ describe("chunkDocument", () => {
 
   it("returns nothing for a document with no blocks", () => {
     expect(chunk("", 100)).toEqual([]);
+  });
+});
+
+describe("chunkDocument against a long document", () => {
+  it("holds the budget when many blocks stack up under one heading", () => {
+    // A word counter cannot catch this: the blank line joining two blocks is
+    // zero words but real characters, so only a counter that sees them does.
+    const blocks = Array.from({ length: 200 }, (_, i) => `Block number ${i} carries a sentence of its own.`);
+    const page = `# Handbook\n\n## Section\n\n${blocks.join("\n\n")}\n`;
+    const document_ = document(page);
+    const chunks = chunkDocument(document_, parseMarkdown(page), {
+      maxTokens: 256,
+      countTokens: estimateTokens,
+    });
+
+    expect(chunks.length).toBeGreaterThan(5);
+    for (const piece of chunks) {
+      expect(estimateTokens(embedText(piece, true))).toBeLessThanOrEqual(256);
+      expect(piece.tokens).toBeLessThanOrEqual(256);
+    }
   });
 });

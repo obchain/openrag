@@ -23,6 +23,9 @@ for (const document of documents) {
   console.log(`  id      ${document.id}`);
   console.log(`  size    ${document.text.length} chars → ${parsed.text.length} after parsing`);
   console.log(`  blocks  ${parsed.blocks.length}`);
+  if (parsed.blocks.length === 0) {
+    console.log("  ⚠ no readable content — the page probably renders its text with JavaScript");
+  }
 
   for (const block of parsed.blocks) {
     const where = block.headingPath.length ? block.headingPath.join(" › ") : "(page top)";

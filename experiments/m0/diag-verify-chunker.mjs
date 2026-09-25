@@ -12,16 +12,25 @@ const countTokens = (text) => tok.encode(text).length;
 const { documents } = await loadFiles("corpus/plausible");
 const chunks = [];
 for (const d of documents) chunks.push(...chunkDocument(d, parseMarkdown(d.text), { countTokens }));
-console.log(`${chunks.length} chunks`);
+console.log(`${chunks.length} chunks (run \`pnpm build\` first: this reads the built package)`);
+
+// The headline claim of section 6, checked rather than described.
+const over = chunks.filter((c) => countTokens(embedText(c, true)) > 256);
+const largest = Math.max(...chunks.map((c) => countTokens(embedText(c, true))));
+console.log(`largest chunk ${largest} tokens, over budget: ${over.length}`);
+if (over.length > 0) {
+  console.error(`FAIL: ${over.length} chunks are over the 256 token budget`);
+  process.exitCode = 1;
+}
 
 const embedder = await loadEmbedder("bge-small-en", { dtype: "q8" });
 const reranker = await loadReranker("ms-marco-minilm");
-const texts = chunks.map((c) => embedText(c));
+const texts = chunks.map((c) => embedText(c, true));
 let t = performance.now();
 const vecs = await embedder.embedDocs(texts);
 console.log(`embedded in ${Math.round((performance.now() - t) / 1000)} s`);
 
-const store = sqliteStore(chunks.map((c) => ({ embedText: embedText(c) })), vecs);
+const store = sqliteStore(chunks.map((c) => ({ embedText: embedText(c, true) })), vecs);
 const match = chunks.map((c) => norm(`${[c.title, ...c.headingPath].join(" ")}\n${c.text}`));
 const { questions } = JSON.parse(fs.readFileSync("questions.json", "utf8"));
 

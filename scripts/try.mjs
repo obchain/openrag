@@ -33,7 +33,8 @@ for (const document of documents) {
     console.log("  ⚠ no readable content — the page probably renders its text with JavaScript");
   }
 
-  const chunks = chunkDocument(document, parsed);
+  // No embedder here, so sizes are the rough estimate, not the model's count.
+  const chunks = chunkDocument(document, parsed, { countTokens: estimateTokens });
   const sizes = chunks.map((chunk) => chunk.tokens).sort((a, b) => a - b);
   console.log(
     `  chunks  ${chunks.length}  (tokens: median ${sizes[sizes.length >> 1] ?? 0}, max ${sizes.at(-1) ?? 0}, estimated)`,

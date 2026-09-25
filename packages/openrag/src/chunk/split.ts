@@ -27,7 +27,11 @@ export function split(text: string, maxTokens: number, count: CountTokens): stri
   };
 
   for (const { segment } of SENTENCES.segment(text)) {
-    if (buffer !== "" && count(buffer + segment) > maxTokens && !OPEN_URL.test(buffer)) flush();
+    // The cut is inside a url only when the next piece carries on from it. A
+    // sentence that merely ends with a url has ended, and a run of links would
+    // otherwise never flush at all.
+    const insideUrl = OPEN_URL.test(buffer) && !/^\s/.test(segment);
+    if (buffer !== "" && !insideUrl && count(buffer + segment) > maxTokens) flush();
     buffer += segment;
   }
   flush();
@@ -64,9 +68,20 @@ function splitHard(piece: string, maxTokens: number, count: CountTokens): string
   while (rest !== "") {
     let take = Math.min(rest.length, Math.max(1, Math.floor(perToken * maxTokens)));
     while (take > 1 && count(rest.slice(0, take)) > maxTokens) take = Math.floor(take * 0.9);
+    take = whole(rest, take);
     pieces.push(rest.slice(0, take));
     rest = rest.slice(take);
   }
 
   return pieces;
+}
+
+/**
+ * Back off a cut that would land between the two halves of one character.
+ * A lone half survives in memory but becomes U+FFFD the moment the text is
+ * written as UTF-8, so two different halves would hash alike.
+ */
+function whole(text: string, take: number): number {
+  const isHighSurrogate = (code: number) => code >= 0xd800 && code <= 0xdbff;
+  return take > 1 && isHighSurrogate(text.charCodeAt(take - 1)) ? take - 1 : take;
 }

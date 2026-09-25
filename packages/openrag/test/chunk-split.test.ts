@@ -57,6 +57,19 @@ describe("split", () => {
     expect(split(text, 4, words).join(" ")).toBe(text);
   });
 
+  it("shrinks a hard cut when the text does not tokenize evenly", () => {
+    // Dense at the front, cheap after: a proportional guess overshoots, so the
+    // shrink loop has to run for the piece to fit at all.
+    const expensive = (text: string) => {
+      const dense = [...text.slice(0, 50)].length * 5;
+      return Math.ceil(dense + Math.max(0, text.length - 50) / 4);
+    };
+    const pieces = split("q".repeat(400), 60, expensive);
+    expect(pieces.length).toBeGreaterThan(1);
+    for (const piece of pieces) expect(expensive(piece)).toBeLessThanOrEqual(60);
+    expect(pieces.join("")).toBe("q".repeat(400));
+  });
+
   it("returns nothing for blank text", () => {
     expect(split("   \n  ", 10, words)).toEqual([]);
   });

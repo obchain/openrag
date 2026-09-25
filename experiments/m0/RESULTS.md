@@ -122,6 +122,26 @@ _Chunker headings-256. "mix a:b" = weighted RRF, keyword weight a, vector weight
 
 **Suggested rule:** keep both searches. Turn the reranker **on** by default and fuse at 1:1. If a user turns the reranker off, switch the fusion to vector-weighted (≈0.2:1), which is the best no-reranker setting measured here.
 
+## 6. Re-run with the package chunker (2026-09-25)
+
+_The chunker in `packages/openrag` counts tokens with the embedder's own tokenizer
+(`Xenova/bge-small-en-v1.5`) instead of `cl100k_base`, and its budget covers the
+`page › heading` header as well as the text. Same corpus, same questions, same
+embedder and reranker; `diag-verify-chunker.mjs` reproduces it._
+
+| | chunks | hit@1 | hit@5 | MRR |
+|---|---|---|---|---|
+| M0 heading-256 (cl100k, text-only budget) | 1102 | 74% | 90% | 0.81 |
+| **package chunker** (model tokenizer, header in budget) | **1210** | **79%** | **90%** | **0.83** |
+
+By question type for the package chunker: exact 93% / 100% / 0.96, paraphrase 60% / 73% / 0.68,
+code-mixed 83% / 100% / 0.88. Missed at 5: P02, P06, P07, P15 — all paraphrases.
+
+Why the counts differ: the model's tokenizer counts about 14% more tokens than `cl100k` on this
+corpus (p95 1.42×), so pieces that only looked as if they fit are now split. Before the change,
+**140 of 1102 chunks (12.7%) were over the budget they claimed to respect**; the worst was a
+markdown table counted at 255 and actually 454. Now the maximum is exactly 256.
+
 ## Findings
 
 1. **Chunking:** heading-aware, max 256 tokens, with the "page › heading" header prepended. It gave the best top-1 and MRR, and it never cut an answer in half.

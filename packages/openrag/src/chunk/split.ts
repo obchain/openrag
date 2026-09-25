@@ -57,9 +57,12 @@ function splitWords(sentence: string, maxTokens: number, count: CountTokens): st
 function splitHard(piece: string, maxTokens: number, count: CountTokens): string[] {
   const pieces: string[] = [];
   let rest = piece;
+  // One count of the whole run gives characters-per-token; re-counting the
+  // remainder every round would tokenize a large blob over and over.
+  const perToken = piece.length / Math.max(1, count(piece));
 
   while (rest !== "") {
-    let take = Math.max(1, Math.floor((rest.length * maxTokens) / count(rest)));
+    let take = Math.min(rest.length, Math.max(1, Math.floor(perToken * maxTokens)));
     while (take > 1 && count(rest.slice(0, take)) > maxTokens) take = Math.floor(take * 0.9);
     pieces.push(rest.slice(0, take));
     rest = rest.slice(take);

@@ -1,30 +1,10 @@
 import { sha256 } from "../hash.js";
-import type { ParsedDocument } from "../parse/markdown.js";
-import type { Chunk, SourceDocument } from "../types.js";
+import type { Chunk, ChunkOptions, ParsedDocument, SourceDocument } from "../types.js";
 import { split } from "./split.js";
 import type { CountTokens } from "./tokens.js";
 
 /** Measured on the practice corpus: 128 and 512 both scored worse (RESULTS.md, section 1). */
 export const DEFAULT_MAX_TOKENS = 256;
-
-export interface ChunkOptions {
-  /**
-   * How a piece is measured. Required, and required to be the same counter the
-   * embedder uses, because a budget counted with another ruler is a guess.
-   * `estimateTokens` is available for a run where no tokenizer is at hand, but
-   * it has to be asked for by name.
-   */
-  countTokens: CountTokens;
-  maxTokens?: number;
-  /**
-   * Prepend `page › heading` to the text that gets embedded. Measured: dropping
-   * it cost 7 points of hit@5, and code-mixed questions fell from 100% to 83%.
-   *
-   * Whatever is chosen here has to be passed to `embedText` as well, or the
-   * pieces are packed to one budget and embedded against another.
-   */
-  header?: boolean;
-}
 
 /** What the embedder reads: the piece, under the path that leads to it. */
 export function embedText(chunk: Pick<Chunk, "title" | "headingPath" | "text">, header: boolean): string {
@@ -50,7 +30,14 @@ export function chunkDocument(
   const maxTokens = options.maxTokens ?? DEFAULT_MAX_TOKENS;
   const header = options.header ?? true;
   const count = options.countTokens;
-  const title = parsed.title ?? document.title;
+  // A parser returns "" for a heading that holds only an image, and `??` would
+  // keep it, embedding every chunk under a header that starts with a separator.
+  const title = named(parsed.title) ?? named(document.title) ?? "";
+
+  /** What the embedder reads for a piece, and what the budget is spent on. */
+  const countFor = (headingPath: string[], text: string) =>
+    count(embedText({ title, headingPath, text }, header));
+
   /**
    * What a piece may hold once its header has taken its share of the budget.
    * Memoised: the header is the same for every block of a section, and counting
@@ -61,11 +48,11 @@ export function chunkDocument(
     const key = headingPath.join("\u0000");
     let budget = budgets.get(key);
     if (budget === undefined) {
-      budget = maxTokens - count(embedText({ title, headingPath, text: "" }, header));
+      budget = maxTokens - countFor(headingPath, "");
       if (budget < 1) {
         throw new Error(
-          `chunk: the header "${[title, ...headingPath].join(" › ")}" needs more than the whole ` +
-            `${maxTokens} token budget. Raise maxTokens or chunk with header: false.`,
+          `chunk: in ${document.uri}, the header "${[title, ...headingPath].join(" › ")}" needs more ` +
+            `than the whole ${maxTokens} token budget. Raise maxTokens or chunk with header: false.`,
         );
       }
       budgets.set(key, budget);
@@ -74,54 +61,92 @@ export function chunkDocument(
   };
 
   const chunks: Chunk[] = [];
+  const seen = new Set<string>();
   let pending: Piece[] = [];
   let pendingText = "";
-
-  /** The budget covers what the embedder actually reads, header included. */
-  const fits = (headingPath: string[], text: string) =>
-    count(embedText({ title, headingPath, text }, header)) <= maxTokens;
-
-  const seen = new Map<string, number>();
+  let pendingTokens = 0;
 
   const flush = () => {
     if (pending.length === 0) return;
     const first = pending[0] as Piece;
     const last = pending[pending.length - 1] as Piece;
     const headingPath = [...first.headingPath]; // never share one array between chunks
-    const text = pendingText;
-    const embedded = embedText({ title, headingPath, text }, header);
 
     // The fingerprint covers everything the embedder reads, so two chunks that
     // share a paragraph under different headings stay distinct.
+    const embedded = embedText({ title, headingPath, text: pendingText }, header);
     const hash = sha256(embedded);
-    // Derived from content, not from position: inserting a paragraph higher up
-    // must not renumber every chunk below it and force a full re-embed.
-    const repeat = seen.get(hash) ?? 0;
-    seen.set(hash, repeat + 1);
 
-    chunks.push({
-      id: `${document.id}-${hash.slice(0, 12)}${repeat === 0 ? "" : `-${repeat}`}`,
-      docId: document.id,
-      namespace: document.namespace,
-      uri: document.uri,
-      title,
-      headingPath,
-      text,
-      charStart: first.charStart,
-      charEnd: last.charEnd,
-      tokens: count(embedded),
-      hash,
-    });
+    // A document that repeats a line verbatim under the same heading has nothing
+    // to add the second time: the same text would compete with itself for a slot,
+    // and numbering the copies would make ids depend on position again.
+    if (!seen.has(hash)) {
+      seen.add(hash);
+      chunks.push({
+        id: `${document.id}-${hash.slice(0, 12)}`,
+        docId: document.id,
+        namespace: document.namespace,
+        uri: document.uri,
+        title,
+        headingPath,
+        text: pendingText,
+        charStart: first.charStart,
+        charEnd: last.charEnd,
+        tokens: count(embedded),
+        hash,
+      });
+    }
+
     pending = [];
     pendingText = "";
+    pendingTokens = 0;
+  };
+
+  const start = (piece: Piece, tokens: number) => {
+    pending = [piece];
+    pendingText = piece.text;
+    pendingTokens = tokens;
   };
 
   for (const piece of pieces(parsed, budgetFor, count)) {
-    const sameSection = pending[0]?.headingPath.join("\u0000") === piece.headingPath.join("\u0000");
-    const merged = pendingText === "" ? piece.text : `${pendingText}\n\n${piece.text}`;
-    if (pending.length > 0 && (!sameSection || !fits(piece.headingPath, merged))) flush();
-    pending.push(piece);
-    pendingText = pendingText === "" ? piece.text : `${pendingText}\n\n${piece.text}`;
+    const pieceTokens = count(piece.text);
+    if (pending.length === 0) {
+      start(piece, pieceTokens);
+      continue;
+    }
+    const sameSection = (pending[0] as Piece).headingPath.join("\u0000") === piece.headingPath.join("\u0000");
+    if (!sameSection) {
+      flush();
+      start(piece, pieceTokens);
+      continue;
+    }
+
+    /**
+     * Counting the whole packed text again for every block tokenizes a document
+     * many times over. Adding the counts instead can only overstate the total —
+     * joining two pieces may merge tokens at the seam but never splits one, and
+     * a tokenizer that adds its own markers adds them once per call rather than
+     * once per chunk. So while the sum still fits, the real count certainly
+     * does, and only a sum that overflows is worth an exact recount.
+     */
+    const sum = pendingTokens + pieceTokens;
+    if (sum <= budgetFor(piece.headingPath)) {
+      pending.push(piece);
+      pendingText = `${pendingText}\n\n${piece.text}`;
+      pendingTokens = sum;
+      continue;
+    }
+
+    const merged = `${pendingText}\n\n${piece.text}`;
+    const mergedTokens = count(merged);
+    if (mergedTokens <= budgetFor(piece.headingPath)) {
+      pending.push(piece);
+      pendingText = merged;
+      pendingTokens = mergedTokens;
+    } else {
+      flush();
+      start(piece, pieceTokens);
+    }
   }
   flush();
 
@@ -173,3 +198,6 @@ function* pieces(
     }
   }
 }
+
+/** A title that is only whitespace is no title at all. */
+const named = (value: string | undefined) => (value?.trim() ? value : undefined);

@@ -6,7 +6,7 @@ _Status: **draft**. Milestones below are a first cut. They get sized and finaliz
 
 A package that lets any developer ship a chatbot grounded in their own documents with one line of code, and customize every layer when they need to.
 
-openRag is also the first layer of a wider chatbot framework (see `VISION.md`, D-006). So it has to work as a **tool** that other components call, not only as a standalone bot.
+openRag is also the first layer of a wider chatbot framework (Phases 2 to 5 below). So it has to work as a **tool** that other components call, not only as a standalone bot.
 
 ## Success criteria
 
@@ -29,7 +29,7 @@ The project is done (v1) when all of these are true and measured, not claimed:
 ### Phase 0 — Definition ← current
 - Lock idea, name, scope ✅
 - Language: TypeScript ✅ (D-005)
-- Wider vision recorded ✅ (`VISION.md`, D-006)
+- Wider vision recorded ✅ (Phases 2 to 5 below)
 - Architecture discussion → `ARCHITECTURE.md`
 - Resolve open decisions (target dev, positioning, providers)
 
@@ -54,7 +54,7 @@ Level-1 API (`Bot("./docs").ask(...)`) should work end to end as early as M4. Af
 `docker run … serve ./docs` → REST + streaming API over the same core, ready for many tenants through namespaces. A thin layer: no new RAG logic.
 
 ### Phases 3–5 — The framework
-Long-term direction from `VISION.md`. Each phase starts only after the one before it has shipped.
+Long-term direction. Each phase starts only after the one before it has shipped.
 
 - **Phase 3: Knowledge tools + router.** SQL, API/OpenAPI and FAQ tools next to openRag, plus a router that picks the right tool(s) for each question.
 - **Phase 4: Actions + permissions.** Tools that do things, with permissions enforced in code, an owner approval flow and an audit log.

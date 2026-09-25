@@ -2,7 +2,7 @@
 
 _Status: **draft, under discussion.** Nothing here is decided yet except the language (TypeScript-first, D-005)._
 
-> **Visual version: [`architecture.html`](architecture.html).** It's more detailed than this file: the big picture (where openRag fits in the framework), diagrams for every part, the chat-turn sequence, the planner, the data model, the swappable-parts table, the open decisions A-1…A-9, and a glossary. It's written in plain language. Whenever an A-decision is locked, it gets written up here and in DECISIONS.md.
+> **Visual version: [`architecture.html`](architecture.html).** It's more detailed than this file: the big picture (where openRag fits in the framework), diagrams for every part, the chat-turn sequence, the planner, the data model, the swappable-parts table, the open decisions A-1…A-9, and a glossary. It's written in plain language.
 
 ## Proposed layers
 
@@ -64,7 +64,7 @@ bot = Bot(
 
 ## Tool surface (D-006)
 
-openRag is layer 1 of a wider chatbot framework (`VISION.md`), so it also has to work as a tool that a router or agent calls:
+openRag is layer 1 of a wider chatbot framework, so it also has to work as a tool that a router or agent calls:
 
 - **`retrieve(query)`**: no LLM call. Returns ranked chunks, citations and `{ grounded, reason }`.
 - **`asTool()`**: a tool definition (name, description, input schema, run) for any agent loop.

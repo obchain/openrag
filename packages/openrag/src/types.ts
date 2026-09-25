@@ -154,7 +154,11 @@ export interface Reranker {
 /** Any backend that can do these four things inside a namespace can be the store. */
 export interface Store {
   upsert(namespace: Namespace, chunks: Chunk[], vectors: number[][]): Promise<void>;
+  /** Write chunks whose vectors the index already holds, after an edit moved them. */
+  restate(namespace: Namespace, chunks: Chunk[]): Promise<void>;
   deleteDocuments(namespace: Namespace, docIds: string[]): Promise<void>;
+  /** Incremental re-indexing removes pieces, not only whole documents. */
+  deleteChunks(namespace: Namespace, chunkIds: string[]): Promise<void>;
   vectorSearch(namespace: Namespace, vector: number[], topK: number): Promise<SearchHit[]>;
   lexicalSearch(namespace: Namespace, query: string, topK: number): Promise<SearchHit[]>;
 }

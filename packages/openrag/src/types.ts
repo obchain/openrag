@@ -4,6 +4,9 @@
  * that implements it ships; the rest are still drafts.
  */
 
+import type { ChunkOptions } from "./chunk/chunker.js";
+import type { ParsedDocument } from "./parse/markdown.js";
+
 /** A tenant boundary. Every store call is scoped to one (D-006). */
 export type Namespace = string;
 
@@ -45,7 +48,11 @@ export interface Chunk {
   /** Section path inside the document, e.g. ["Refunds", "International"]. */
   headingPath: string[];
   text: string;
-  /** Position in the source document, so a citation can highlight the exact span. */
+  /**
+   * Position in the parsed text the chunk came from, so a citation can highlight
+   * the exact span. For Markdown that text is the file; for HTML it is the text
+   * the page was converted to, which is what an index stores.
+   */
   charStart: number;
   charEnd: number;
   tokens: number;
@@ -81,7 +88,7 @@ export interface RetrieveResult {
 }
 
 export interface Chunker {
-  chunk(doc: SourceDocument): Chunk[];
+  chunk(document: SourceDocument, parsed: ParsedDocument, options: ChunkOptions): Chunk[];
 }
 
 export interface Embedder {

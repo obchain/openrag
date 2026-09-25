@@ -4,8 +4,7 @@ import {
   estimateTokens,
   loadFiles,
   loadUrls,
-  parseHtml,
-  parseMarkdown,
+  parseDocument,
 } from "../packages/openrag/dist/index.js";
 
 const [target, ...flags] = process.argv.slice(2);
@@ -21,9 +20,7 @@ console.log(`\n${documents.length} document(s), ${failures.length} failure(s)`);
 for (const failure of failures) console.log(`  ✗ ${failure.uri} — ${failure.reason}`);
 
 for (const document of documents) {
-  const parsed = /^\s*</.test(document.text)
-    ? parseHtml(document.text, { url: document.uri })
-    : parseMarkdown(document.text);
+  const parsed = parseDocument(document);
 
   console.log(`\n${"─".repeat(72)}\n${document.uri}`);
   console.log(`  title   ${parsed.title ?? document.title}`);

@@ -3,8 +3,7 @@ import fs from "node:fs";
 import { AutoTokenizer } from "@huggingface/transformers";
 import {
   loadFiles,
-  parseMarkdown,
-  parseHtml,
+  parseDocument,
   chunkDocument,
   embedText,
   DEFAULT_MAX_TOKENS,
@@ -19,8 +18,7 @@ const countTokens = (text) => tok.encode(text).length;
 const { documents } = await loadFiles("corpus/plausible");
 const chunks = [];
 for (const d of documents) {
-  // Same sniff as scripts/try.mjs: the default include list accepts html too.
-  const parsed = /^\s*</.test(d.text) ? parseHtml(d.text, { url: d.uri }) : parseMarkdown(d.text);
+  const parsed = parseDocument(d);
   chunks.push(...chunkDocument(d, parsed, { countTokens }));
 }
 console.log(`${chunks.length} chunks (run \`pnpm build\` first: this reads the built package)`);

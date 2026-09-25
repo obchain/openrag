@@ -10,10 +10,11 @@ export type { FilesystemOptions } from "./load/filesystem.js";
 export { DEFAULT_EXCLUDE, DEFAULT_INCLUDE, DEFAULT_MAX_BYTES, loadFiles } from "./load/filesystem.js";
 export type { FetchLike, UrlOptions } from "./load/url.js";
 export { DEFAULT_USER_AGENT, loadUrls } from "./load/url.js";
+export { parseDocument } from "./parse/document.js";
 export type { HtmlOptions } from "./parse/html.js";
 export { parseHtml } from "./parse/html.js";
 export { parseMarkdown } from "./parse/markdown.js";
-export type { Snapshot, UpdatePlan, UpdateSummary } from "./sync/plan.js";
+export type { IndexedDocument, Snapshot, UpdatePlan, UpdateSummary } from "./sync/plan.js";
 export { planUpdate } from "./sync/plan.js";
 export type {
   Block,

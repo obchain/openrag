@@ -15,15 +15,32 @@ const CHROME = 'header,footer,[role="navigation"],[role="banner"],[role="content
  * outside it. Only when nothing is marked do we take the body and strip the
  * furniture by tag and landmark, which is the guessier path.
  */
-function contentRoot(document: HTMLElement): HTMLElement {
+function contentRoot(document: HTMLElement): { root: HTMLElement; marked: boolean } {
   const marked =
     document.querySelector("main") ??
     document.querySelector("article") ??
     document.querySelector('[role="main"]');
-  if (marked) return marked;
+  if (marked) return { root: marked, marked: true };
   const body = document.querySelector("body") ?? document;
   for (const element of body.querySelectorAll(CHROME)) element.remove();
-  return body;
+  return { root: body, marked: false };
+}
+
+/**
+ * Navigation, for a page that marked nothing: an element that is almost all
+ * link text. Only used on the guessing path — when a page says where its
+ * content is, we take it at its word rather than second-guess it, because a
+ * wrong guess deletes an answer instead of leaving noise.
+ */
+function dropLinkLists(root: HTMLElement): void {
+  for (const element of root.querySelectorAll("*")) {
+    if (!element.parentNode) continue; // already removed with an ancestor
+    const links = element.querySelectorAll("a");
+    const total = textOf(element).length;
+    if (links.length < 3 || total < 20) continue; // a real navbar reads "DocsBlogPricingLogin"
+    const linkText = links.reduce((sum, link) => sum + textOf(link).length, 0);
+    if (linkText / total > 0.5) element.remove();
+  }
 }
 
 /**
@@ -55,8 +72,11 @@ function clean(root: HTMLElement, baseUrl?: string): void {
 
 const isSamePageLink = (link: HTMLElement) => (link.getAttribute("href") ?? "").startsWith("#");
 
-/** Zero-width characters are invisible to a reader and noise to a tokenizer. */
-const textOf = (element: HTMLElement) => element.text.replace(/[\u200B-\u200D\uFEFF\s]/g, "");
+/**
+ * Words only. Zero-width characters are invisible to a reader, and a pilcrow or
+ * section sign is the permalink some generators hang off every heading.
+ */
+const textOf = (element: HTMLElement) => element.text.replace(/[\u200B-\u200D\uFEFF\s¶§]/g, "");
 
 function resolve(href: string | undefined, baseUrl: string): string | undefined {
   try {
@@ -81,8 +101,9 @@ export interface HtmlOptions {
 export function parseHtml(html: string, options: HtmlOptions = {}): ParsedDocument {
   const document = parse(html);
   const title = document.querySelector("title")?.text.trim();
-  const root = contentRoot(document);
+  const { root, marked } = contentRoot(document);
   clean(root, options.url);
+  if (!marked) dropLinkLists(root);
 
   const markdown = NodeHtmlMarkdown.translate(root.innerHTML)
     .replace(/[\u200B-\u200D\uFEFF]/g, "")

@@ -106,3 +106,30 @@ describe("parseHtml", () => {
     expect(plain.text).toContain("Body text.");
   });
 });
+
+describe("parseHtml on a page that marks nothing", () => {
+  const NAV = `<div class="wrap">
+    <div><a href="/docs">Docs</a><a href="/blog">Blog</a><a href="/pricing">Pricing</a><a href="/login">Login</a></div>
+    <h1>Installation</h1>
+    <p>Install the package with your package manager of choice.</p>
+  </div>`;
+
+  it("drops an element that is almost entirely links", () => {
+    const parsed = parseHtml(`<body>${NAV}</body>`);
+    expect(parsed.title).toBe("Installation");
+    expect(parsed.text).not.toContain("Pricing");
+    expect(parsed.text).toContain("Install the package");
+  });
+
+  it("leaves those links alone when the page marks its content", () => {
+    const parsed = parseHtml(`<body><main>${NAV}</main></body>`);
+    expect(parsed.text).toContain("Pricing");
+  });
+
+  it("ignores a permalink glyph when deciding a link has no words", () => {
+    const parsed = parseHtml(
+      '<main><h2>Setup<a href="#setup" title="Permalink">¶</a></h2><p>Steps.</p></main>',
+    );
+    expect(parsed.blocks[0]?.headingPath).toEqual(["Setup"]);
+  });
+});

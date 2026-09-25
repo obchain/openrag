@@ -1,5 +1,11 @@
 // Try the pipeline by hand: node scripts/try.mjs <folder | file | url> [--full]
-import { chunkDocument, loadFiles, loadUrls, parseHtml, parseMarkdown } from "../packages/openrag/dist/index.js";
+import {
+  chunkDocument,
+  loadFiles,
+  loadUrls,
+  parseHtml,
+  parseMarkdown,
+} from "../packages/openrag/dist/index.js";
 
 const [target, ...flags] = process.argv.slice(2);
 if (!target) {
@@ -29,10 +35,14 @@ for (const document of documents) {
 
   const chunks = chunkDocument(document, parsed);
   const sizes = chunks.map((chunk) => chunk.tokens).sort((a, b) => a - b);
-  console.log(`  chunks  ${chunks.length}  (tokens: median ${sizes[sizes.length >> 1] ?? 0}, max ${sizes.at(-1) ?? 0}, estimated)`);
+  console.log(
+    `  chunks  ${chunks.length}  (tokens: median ${sizes[sizes.length >> 1] ?? 0}, max ${sizes.at(-1) ?? 0}, estimated)`,
+  );
 
   for (const chunk of chunks) {
     const body = flags.includes("--full") ? chunk.text : `${chunk.text.slice(0, 70).replace(/\n/g, " ")}…`;
-    console.log(`\n  [${chunk.charStart}-${chunk.charEnd}] ${chunk.tokens} tok · ${[chunk.title, ...chunk.headingPath].join(" › ")}\n    ${body}`);
+    console.log(
+      `\n  [${chunk.charStart}-${chunk.charEnd}] ${chunk.tokens} tok · ${[chunk.title, ...chunk.headingPath].join(" › ")}\n    ${body}`,
+    );
   }
 }

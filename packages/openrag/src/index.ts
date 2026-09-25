@@ -1,4 +1,3 @@
-export type { ChunkOptions } from "./chunk/chunker.js";
 export { chunkDocument, DEFAULT_MAX_TOKENS, embedText } from "./chunk/chunker.js";
 export { split } from "./chunk/split.js";
 export type { CountTokens } from "./chunk/tokens.js";
@@ -13,12 +12,13 @@ export type { FetchLike, UrlOptions } from "./load/url.js";
 export { DEFAULT_USER_AGENT, loadUrls } from "./load/url.js";
 export type { HtmlOptions } from "./parse/html.js";
 export { parseHtml } from "./parse/html.js";
-export type { Block, ParsedDocument } from "./parse/markdown.js";
 export { parseMarkdown } from "./parse/markdown.js";
 export type {
+  Block,
   ChatEvent,
   Chunk,
   Chunker,
+  ChunkOptions,
   Citation,
   Embedder,
   LLM,
@@ -27,6 +27,7 @@ export type {
   LoadResult,
   Message,
   Namespace,
+  ParsedDocument,
   PlannerAction,
   PlannerResult,
   Reranker,

@@ -1,27 +1,5 @@
 import { fromMarkdown } from "mdast-util-from-markdown";
-
-/**
- * One piece of a document.
- *
- * `text` is always `ParsedDocument.text.slice(charStart, charEnd)`. Cleaning
- * happens by dropping whole blocks, never by editing inside one, so a citation
- * can always point at a real span of the text that was indexed.
- */
-export interface Block {
-  /** Section this block sits under, e.g. ["Billing", "Refunds"]. */
-  headingPath: string[];
-  text: string;
-  charStart: number;
-  charEnd: number;
-}
-
-export interface ParsedDocument {
-  /** Front matter `title` if the page declares one, else its first heading. */
-  title?: string;
-  /** The text the offsets refer to. Markdown keeps its source; HTML is converted first. */
-  text: string;
-  blocks: Block[];
-}
+import type { Block, ParsedDocument } from "../types.js";
 
 /**
  * Turn Markdown or MDX into the blocks the chunker packs, each one still

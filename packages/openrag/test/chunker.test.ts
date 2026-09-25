@@ -102,9 +102,12 @@ describe("chunkDocument", () => {
     expect(() => chunk(page, 5)).toThrow(/budget/);
   });
 
-  it("reads back from the source at the offsets it reports", () => {
+  it("reads back from the source at the offsets it reports, every block of it", () => {
     for (const piece of chunk(PAGE, 100)) {
-      expect(PAGE.slice(piece.charStart, piece.charEnd)).toContain(piece.text.split("\n\n")[0]);
+      const span = PAGE.slice(piece.charStart, piece.charEnd);
+      for (const block of piece.text.split("\n\n")) expect(span).toContain(block);
+      // the span ends where the chunk ends, not early
+      expect(span.endsWith(piece.text.split("\n\n").at(-1) as string)).toBe(true);
     }
   });
 

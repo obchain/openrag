@@ -1,6 +1,7 @@
 // Try the pipeline by hand: node scripts/try.mjs <folder | file | url> [--full]
 import {
   chunkDocument,
+  estimateTokens,
   loadFiles,
   loadUrls,
   parseHtml,
@@ -34,7 +35,15 @@ for (const document of documents) {
   }
 
   // No embedder here, so sizes are the rough estimate, not the model's count.
-  const chunks = chunkDocument(document, parsed, { countTokens: estimateTokens });
+  // Chunking throws on a document it cannot honestly handle; one such page
+  // should not end the run, so it is reported like any other failure.
+  let chunks = [];
+  try {
+    chunks = chunkDocument(document, parsed, { countTokens: estimateTokens });
+  } catch (error) {
+    console.log(`  ✗ cannot chunk: ${error instanceof Error ? error.message : String(error)}`);
+    continue;
+  }
   const sizes = chunks.map((chunk) => chunk.tokens).sort((a, b) => a - b);
   console.log(
     `  chunks  ${chunks.length}  (tokens: median ${sizes[sizes.length >> 1] ?? 0}, max ${sizes.at(-1) ?? 0}, estimated)`,

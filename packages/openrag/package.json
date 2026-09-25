@@ -31,6 +31,8 @@
   ],
   "license": "UNLICENSED",
   "dependencies": {
-    "mdast-util-from-markdown": "^2.0.3"
+    "mdast-util-from-markdown": "^2.0.3",
+    "node-html-markdown": "^2.0.0",
+    "node-html-parser": "^9.0.4"
   }
 }

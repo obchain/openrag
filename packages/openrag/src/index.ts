@@ -7,7 +7,7 @@ export { DEFAULT_EXCLUDE, DEFAULT_INCLUDE, DEFAULT_MAX_BYTES, loadFiles } from "
 export type { FetchLike, UrlOptions } from "./load/url.js";
 export { DEFAULT_USER_AGENT, loadUrls } from "./load/url.js";
 export type { Block, ParsedDocument } from "./parse/markdown.js";
-export { parseMarkdown, splitFrontMatter } from "./parse/markdown.js";
+export { parseMarkdown } from "./parse/markdown.js";
 export type {
   ChatEvent,
   Chunk,

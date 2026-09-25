@@ -113,7 +113,7 @@ describe("parseMarkdown", () => {
   });
 
   it("returns no blocks for an empty page", () => {
-    expect(parseMarkdown("")).toEqual({ title: undefined, blocks: [] });
+    expect(parseMarkdown("")).toEqual({ title: undefined, text: "", blocks: [] });
   });
 });
 

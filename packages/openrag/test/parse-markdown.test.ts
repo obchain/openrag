@@ -135,3 +135,22 @@ describe("parseMarkdown noise that only real pages show", () => {
     expect(text).toContain("<https://example.com>");
   });
 });
+
+describe("parseMarkdown heading levels that skip", () => {
+  it("nests a skipped level instead of leaving a hole in the path", () => {
+    const parsed = parseMarkdown("# Billing\n\n#### Deep\n\nSome text here.\n");
+    const [path] = parsed.blocks.map((block) => block.headingPath);
+    expect(path).toEqual(["Deep"]);
+    expect(path?.every((heading) => typeof heading === "string")).toBe(true);
+  });
+
+  it("keeps the path dense when a page jumps around", () => {
+    const page = "## A\n\nOne.\n\n#### B\n\nTwo.\n\n### C\n\nThree.\n\n## D\n\nFour.\n";
+    expect(parseMarkdown(page).blocks.map((block) => block.headingPath)).toEqual([
+      ["A"],
+      ["A", "B"],
+      ["A", "C"],
+      ["D"],
+    ]);
+  });
+});

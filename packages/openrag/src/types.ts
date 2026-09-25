@@ -1,6 +1,7 @@
 /**
  * Core interfaces. Every layer is an interface with one default implementation,
- * so any part can be swapped (D-012). Nothing here is implemented yet.
+ * so any part can be swapped. An interface here is settled only once the layer
+ * that implements it ships; the rest are still drafts.
  */
 
 /** A tenant boundary. Every store call is scoped to one (D-006). */

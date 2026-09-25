@@ -26,7 +26,7 @@ export interface UpdatePlan {
    * written again because the edit above it moved the span a citation points at.
    */
   restate: Chunk[];
-  /** Chunks of documents that did not change at all. Nothing to write. */
+  /** Chunks that stay as they are: untouched documents, and any held back. */
   keep: string[];
   /** Chunk ids to remove, from the vectors and from the keyword index alike. */
   remove: string[];
@@ -120,6 +120,9 @@ export function planUpdate(
   for (const docId of new Set([...snapshot.documents.keys(), ...snapshot.chunks.keys()])) {
     if (present.has(docId)) continue;
     if (!readWasComplete) {
+      // Its pieces stay in the index, so they belong in `keep`: a caller
+      // rebuilding from keep + embed + restate must not lose them.
+      keep.push(...(snapshot.chunks.get(docId) ?? []));
       summary.held++;
       continue;
     }

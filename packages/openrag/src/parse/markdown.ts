@@ -8,7 +8,9 @@ import type { Block, ParsedDocument } from "../types.js";
 export function parseMarkdown(source: string): ParsedDocument {
   const { title, body, offset } = splitFrontMatter(source);
   const blocks: Block[] = [];
-  const headingPath: string[] = [];
+  /** Open headings, outermost first. A stack handles a skipped level and a
+   *  second h1 without any index arithmetic to get wrong. */
+  const open: { depth: number; text: string }[] = [];
   let pageTitle: string | undefined;
 
   for (const node of fromMarkdown(body).children) {
@@ -19,24 +21,25 @@ export function parseMarkdown(source: string): ParsedDocument {
 
     if (node.type === "heading") {
       const heading = inlineText(node).trim();
-      if (node.depth === 1) {
-        // One H1 is the page's own title, not a section inside it.
-        pageTitle ??= heading;
-        headingPath.length = 0;
-      } else {
-        // A page that jumps from h1 to h4 still nests one level, never leaving a
-        // hole: a gap would embed as "Billing ›  ›  › Deep" and store as null.
-        const level = Math.min(node.depth - 2, headingPath.length);
-        headingPath.length = Math.min(headingPath.length, level); // leaving a section closes the ones under it
-        headingPath[level] = heading;
+
+      // The first h1 names the page. A second one is a section inside it, which
+      // is what a concatenated handbook or a converted page looks like.
+      if (node.depth === 1 && pageTitle === undefined && heading !== "") {
+        pageTitle = heading;
+        open.length = 0;
+        continue;
       }
+
+      // Opening a heading closes every heading at its level or deeper.
+      while (open.length > 0 && (open[open.length - 1] as { depth: number }).depth >= node.depth) open.pop();
+      if (heading !== "") open.push({ depth: node.depth, text: heading });
       continue;
     }
 
     if (isNoise(node.type, text)) continue;
 
     blocks.push({
-      headingPath: [...headingPath],
+      headingPath: open.map((heading) => heading.text),
       text,
       charStart: start + offset,
       charEnd: end + offset,
@@ -50,12 +53,16 @@ export function parseMarkdown(source: string): ParsedDocument {
 const MDX_STATEMENT = /^(import|export)\s/;
 
 /**
- * A tag opening a paragraph. CommonMark only calls markup an html block when the
- * tag is complete on its own line, so a component written across several lines
- * arrives as an ordinary paragraph and has to be caught here.
- * `<https://example.com>` is an autolink, not a tag, and does not match.
+ * A paragraph that is really markup: an MDX component, which is capitalised by
+ * convention, or a layout tag. CommonMark only calls markup an html block when
+ * the tag is complete on its own line, so a component written across several
+ * lines arrives as an ordinary paragraph and has to be caught here.
+ *
+ * Deliberately narrow. A sentence may well open with `<b>`, `<kbd>` or `<br>`,
+ * and dropping the paragraph would delete an answer with nothing to show for it.
+ * `<https://example.com>` is an autolink, not a tag, and does not match either.
  */
-const MARKUP_START = /^<\/?[A-Za-z][\w.-]*[\s/>]/;
+const MARKUP_START = /^<\/?(?:[A-Z][\w.]*|div|section|figure|head|script|style|iframe|noscript)\b/;
 
 /**
  * Markup that carries no answer: a component, a wrapper div, a `<head>` block.

@@ -166,6 +166,8 @@ describe("planUpdate", () => {
 
     expect(plan.remove).toEqual([]);
     expect(plan.removedDocuments).toEqual([]);
+    // keep + embed + restate is the surviving set, so the held chunks are in it
+    expect(plan.keep).toEqual(["a-1"]);
     expect(plan.summary).toEqual({ added: 0, updated: 0, unchanged: 0, deleted: 0, held: 1 });
   });
 

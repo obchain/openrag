@@ -8,7 +8,10 @@ export const DEFAULT_MAX_TOKENS = 256;
 
 /** What the embedder reads: the piece, under the path that leads to it. */
 export function embedText(chunk: Pick<Chunk, "title" | "headingPath" | "text">, header: boolean): string {
-  return header ? `${[chunk.title, ...chunk.headingPath].join(" › ")}\n${chunk.text}` : chunk.text;
+  if (!header) return chunk.text;
+  // A titleless document or a blank heading must not leave a dangling separator.
+  const path = [chunk.title, ...chunk.headingPath].filter((part) => part.trim() !== "").join(" › ");
+  return path === "" ? chunk.text : `${path}\n${chunk.text}`;
 }
 
 /**
@@ -62,14 +65,15 @@ export function chunkDocument(
 
   const chunks: Chunk[] = [];
   const seen = new Set<string>();
-  let pending: Piece[] = [];
+  // Only the two ends of a packed chunk are ever read, so the pieces between
+  // them are not kept: their text is already in `pendingText`.
+  let first: Piece | undefined;
+  let last: Piece | undefined;
   let pendingText = "";
   let pendingTokens = 0;
 
   const flush = () => {
-    if (pending.length === 0) return;
-    const first = pending[0] as Piece;
-    const last = pending[pending.length - 1] as Piece;
+    if (first === undefined || last === undefined) return;
     const headingPath = [...first.headingPath]; // never share one array between chunks
 
     // The fingerprint covers everything the embedder reads, so two chunks that
@@ -97,23 +101,25 @@ export function chunkDocument(
       });
     }
 
-    pending = [];
+    first = undefined;
+    last = undefined;
     pendingText = "";
     pendingTokens = 0;
   };
 
   const start = (piece: Piece, tokens: number) => {
-    pending = [piece];
+    first = piece;
+    last = piece;
     pendingText = piece.text;
     pendingTokens = tokens;
   };
 
   for (const piece of pieces(parsed, budgetFor, count)) {
-    if (pending.length === 0) {
+    if (first === undefined) {
       start(piece, count(piece.text));
       continue;
     }
-    const sameSection = (pending[0] as Piece).headingPath.join("\u0000") === piece.headingPath.join("\u0000");
+    const sameSection = first.headingPath.join("\u0000") === piece.headingPath.join("\u0000");
     if (!sameSection) {
       flush();
       start(piece, count(piece.text));
@@ -132,7 +138,7 @@ export function chunkDocument(
     // into a chunk a token or two over budget.
     const sum = pendingTokens + count(`\n\n${piece.text}`);
     if (sum <= budgetFor(piece.headingPath)) {
-      pending.push(piece);
+      last = piece;
       pendingText = `${pendingText}\n\n${piece.text}`;
       pendingTokens = sum;
       continue;
@@ -141,7 +147,7 @@ export function chunkDocument(
     const merged = `${pendingText}\n\n${piece.text}`;
     const mergedTokens = count(merged);
     if (mergedTokens <= budgetFor(piece.headingPath)) {
-      pending.push(piece);
+      last = piece;
       pendingText = merged;
       pendingTokens = mergedTokens;
     } else {

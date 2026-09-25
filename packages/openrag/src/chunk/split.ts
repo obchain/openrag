@@ -83,5 +83,8 @@ function splitHard(piece: string, maxTokens: number, count: CountTokens): string
  */
 function whole(text: string, take: number): number {
   const isHighSurrogate = (code: number) => code >= 0xd800 && code <= 0xdbff;
-  return take > 1 && isHighSurrogate(text.charCodeAt(take - 1)) ? take - 1 : take;
+  if (!isHighSurrogate(text.charCodeAt(take - 1))) return take;
+  // Backing off to nothing is not an option, so a budget too small for one
+  // character takes the whole character and goes over rather than break it.
+  return take > 1 ? take - 1 : Math.min(text.length, 2);
 }

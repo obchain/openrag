@@ -6,7 +6,7 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!**/dist/**", "!**/coverage/**", "!experiments/**"]
+    "includes": ["**", "!**/dist", "!**/coverage", "!experiments"]
   },
   "formatter": {
     "indentStyle": "space",
@@ -16,7 +16,7 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "preset": "none"
+      "preset": "recommended"
     }
   },
   "javascript": {
@@ -24,5 +24,13 @@
       "quoteStyle": "double",
       "semicolons": "always"
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["**/*.html"],
+      "linter": {
+        "enabled": false
+      }
+    }
+  ]
 }

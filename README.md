@@ -45,7 +45,7 @@ chunks  6  (tokens: median 201, max 236)
 | Built | Measured on |
 |---|---|
 | **Loaders** for a folder or a list of urls, with redirects, retries, a concurrency limit, and every failure named rather than dropped | A 134-page corpus: 134 documents, 0 failures, byte-identical on a second run |
-| **Parsers** for Markdown, MDX and HTML: clean text, a heading path, and character offsets back into the source | 16 documentation sites across Docusaurus, VitePress, Sphinx, MkDocs, Nextra, Mintlify, GitBook, Hugo and MDN. 12 clean; the two that render their text with JavaScript say so rather than returning an empty document |
+| **Parsers** for Markdown, MDX and HTML: clean text, a heading path, and character offsets back into the source | 16 documentation sites across Docusaurus, VitePress, Sphinx, MkDocs, Nextra, Mintlify, GitBook, Hugo and MDN. 12 clean, 2 that render their text with JavaScript (they say so rather than returning an empty document), and 2 that keep a small link list at the top |
 | **Heading-aware chunker**: 256 tokens, `page › heading` prefix, counted with the embedder's own tokenizer | 1213 chunks: hit@1 79%, hit@5 90%, MRR 0.83 on the practice question set |
 | **Incremental planning**: what to embed, what to rewrite, what to delete | A second run embeds nothing; a mid-page edit embeds 1 chunk and moves 5 |
 

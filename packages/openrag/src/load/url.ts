@@ -1,6 +1,6 @@
 import { documentId, sha256 } from "../hash.js";
 import type { LoadFailure, LoadResult, Namespace, SourceDocument } from "../types.js";
-import { DEFAULT_MAX_BYTES } from "./filesystem.js";
+import { DEFAULT_MAX_BYTES, reasonFor } from "./shared.js";
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -106,16 +106,20 @@ async function loadUrl(url: string, options: UrlOptions): Promise<Outcome> {
       return failed(`unsupported content type: ${contentType || "unknown"}`);
     }
 
+    const declared = Number(response.headers.get("content-length"));
+    if (Number.isFinite(declared) && declared > maxBytes) {
+      void response.body?.cancel().catch(() => {});
+      return failed(`response is ${declared} bytes, over the ${maxBytes} byte limit`);
+    }
+
     let bytes: Uint8Array;
     try {
-      bytes = new Uint8Array(await response.arrayBuffer());
+      bytes = await readCapped(response, maxBytes);
     } catch (error) {
+      if (error instanceof TooLarge) return failed(error.message);
       if (attempt >= retries) return failed(reasonFor(error));
       await sleep(backoff(attempt, retryDelayMs));
       continue;
-    }
-    if (bytes.byteLength > maxBytes) {
-      return failed(`response is ${bytes.byteLength} bytes, over the ${maxBytes} byte limit`);
     }
 
     const text = new TextDecoder("utf-8").decode(bytes);
@@ -148,13 +152,54 @@ async function loadUrl(url: string, options: UrlOptions): Promise<Outcome> {
   }
 }
 
+class TooLarge extends Error {}
+
+/**
+ * Read the body, stopping at the cap rather than after it.
+ *
+ * A server can lie about `content-length` or omit it, and buffering the whole
+ * response before checking its size means a 2 GB reply is already in memory by
+ * the time it is refused.
+ */
+async function readCapped(response: Response, maxBytes: number): Promise<Uint8Array> {
+  const reader = response.body?.getReader();
+  if (!reader) return new Uint8Array(await response.arrayBuffer());
+
+  const parts: Uint8Array[] = [];
+  let size = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maxBytes) {
+      await reader.cancel().catch(() => {});
+      throw new TooLarge(`response is over the ${maxBytes} byte limit`);
+    }
+    parts.push(value);
+  }
+
+  const bytes = new Uint8Array(size);
+  let at = 0;
+  for (const part of parts) {
+    bytes.set(part, at);
+    at += part.byteLength;
+  }
+  return bytes;
+}
+
 function backoff(attempt: number, base: number): number {
   return base * 2 ** attempt;
 }
 
-/** A server that says how long to wait is more reliable than our own guess. */
+/**
+ * A server that says how long to wait is more reliable than our own guess.
+ * Absent means no instruction, not "wait zero" — `Number(null)` is 0, which
+ * would retry instantly and leave the backoff below unreachable.
+ */
 function retryAfter(response: Response): number | null {
-  const seconds = Number(response.headers.get("retry-after"));
+  const header = response.headers.get("retry-after");
+  if (header === null) return null;
+  const seconds = Number(header);
   return Number.isFinite(seconds) ? Math.max(0, seconds * 1000) : null;
 }
 
@@ -182,11 +227,4 @@ const decodeEntities = (text: string) =>
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function reasonFor(error: unknown): string {
-  if (error instanceof Error) {
-    return error.name === "TimeoutError" ? "timed out" : error.message;
-  }
-  return String(error);
 }

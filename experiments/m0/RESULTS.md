@@ -132,12 +132,12 @@ embedder and reranker; `diag-verify-chunker.mjs` reproduces it._
 | | chunks | hit@1 | hit@5 | MRR |
 |---|---|---|---|---|
 | M0 heading-256 (cl100k, text-only budget) | 1102 | 74% | 90% | 0.81 |
-| **package chunker** (model tokenizer, header in budget) | **1213** | **79%** | **90%** | **0.83** |
+| **package chunker** (model tokenizer, header in budget) | **1215** | **79%** | **90%** | **0.83** |
 
 By question type for the package chunker: exact 93% / 100% / 0.96, paraphrase 60% / 73% / 0.68,
 code-mixed 83% / 100% / 0.88. Missed at 5: P02, P06, P07, P15 — all paraphrases.
 
-Re-measured 2026-09-25 after review, with the url guard and duplicate-chunk fixes: 1213 chunks, same scores.
+Re-measured 2026-09-25 after three review rounds: 1215 chunks, same scores. The count moved as parsing stopped dropping paragraphs that open with an inline tag.
 
 Why the counts differ: the model's tokenizer counts about 14% more tokens than `cl100k` on this
 corpus (p95 1.42×), so pieces that only looked as if they fit are now split. Before the change,

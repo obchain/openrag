@@ -193,7 +193,7 @@ describe("loadUrls", () => {
   it("sends a descriptive user agent", async () => {
     const seen: string[] = [];
     await loadUrls(url("/page"), {
-      fetch: async (input, init) => {
+      fetch: async (_input, init) => {
         seen.push(String(new Headers(init?.headers).get("user-agent")));
         return new Response("<title>Stub</title>", { headers: { "content-type": "text/html" } });
       },
@@ -215,5 +215,62 @@ describe("loadUrls", () => {
     controller.abort();
     const { failures } = await loadUrls(url("/page"), { signal: controller.signal });
     expect(failures).toEqual([{ uri: url("/page"), reason: "cancelled" }]);
+  });
+});
+
+describe("loadUrls under pressure", () => {
+  it("waits between retries when the server gives no Retry-After", async () => {
+    const at: number[] = [];
+    const { failures } = await loadUrls(url("/flaky"), {
+      retries: 2,
+      retryDelayMs: 40,
+      fetch: async () => {
+        at.push(Date.now());
+        return new Response("busy", { status: 503 });
+      },
+    });
+
+    expect(failures).toHaveLength(1);
+    expect(at).toHaveLength(3);
+    // 40ms then 80ms, not three requests in the same millisecond
+    expect((at[1] as number) - (at[0] as number)).toBeGreaterThanOrEqual(30);
+    expect((at[2] as number) - (at[1] as number)).toBeGreaterThanOrEqual(70);
+  });
+
+  it("stops reading a body that runs past the limit, rather than buffering it", async () => {
+    let pulled = 0;
+    const stream = new ReadableStream({
+      pull(controller) {
+        pulled++;
+        if (pulled > 100) return controller.close();
+        controller.enqueue(new TextEncoder().encode("x".repeat(1024)));
+      },
+    });
+
+    const { documents, failures } = await loadUrls(url("/huge"), {
+      maxBytes: 4096,
+      fetch: async () => new Response(stream, { headers: { "content-type": "text/plain" } }),
+    });
+
+    expect(documents).toEqual([]);
+    expect(failures[0]?.reason).toContain("over the 4096 byte limit");
+    expect(pulled).toBeLessThan(10); // it stopped early instead of draining 100 KB
+  });
+
+  it("refuses an oversized response on the header alone", async () => {
+    // An endless body: reading it instead of trusting the header never returns.
+    const endless = new ReadableStream({
+      pull(controller) {
+        controller.enqueue(new TextEncoder().encode("x".repeat(64)));
+      },
+    });
+
+    const { failures } = await loadUrls(url("/declared"), {
+      maxBytes: 1024,
+      fetch: async () =>
+        new Response(endless, { headers: { "content-type": "text/plain", "content-length": "999999" } }),
+    });
+
+    expect(failures[0]?.reason).toContain("999999 bytes");
   });
 });

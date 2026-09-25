@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { documentId, sha256 } from "../hash.js";
 import type { LoadFailure, LoadResult, Namespace, SourceDocument } from "../types.js";
+import { DEFAULT_MAX_BYTES, reasonFor } from "./shared.js";
 
 /** Text formats we know how to index. Anything else has to be asked for explicitly. */
 export const DEFAULT_INCLUDE = [
@@ -16,8 +17,10 @@ export const DEFAULT_INCLUDE = [
 /** Dotfiles and dot folders need no pattern: `fs.glob` already leaves them out. */
 export const DEFAULT_EXCLUDE = ["**/node_modules/**"] as const;
 
-/** 5 MB. A documentation page is never this big; something else is. */
-export const DEFAULT_MAX_BYTES = 5_000_000;
+export { DEFAULT_MAX_BYTES } from "./shared.js";
+
+/** How many files are read at once. Enough to hide latency, few enough to keep file handles sane. */
+const READ_BATCH = 16;
 
 export interface FilesystemOptions {
   namespace?: Namespace;
@@ -54,7 +57,9 @@ export async function loadFiles(
     }
   }
 
-  const root = path.resolve(options.root ?? directories[0] ?? path.dirname(found[0] ?? "."));
+  // Uris, and therefore ids, must not depend on the order the paths were passed
+  // in: a different order would rename every document and re-embed the corpus.
+  const root = path.resolve(options.root ?? commonParent([...directories, ...found.map(path.dirname)]));
   for (const directory of directories) {
     const glob = fs.glob(options.include ?? DEFAULT_INCLUDE, {
       cwd: directory,
@@ -69,36 +74,43 @@ export async function loadFiles(
     }
   }
 
-  const documents: SourceDocument[] = [];
   const targets = [...new Set(found)]
     .map((absolute) => ({ absolute, uri: toUri(root, absolute) }))
     .sort((a, b) => (a.uri < b.uri ? -1 : 1));
 
-  for (const { absolute, uri } of targets) {
+  const read = async ({ absolute, uri }: { absolute: string; uri: string }) => {
     try {
       const stats = await fs.stat(absolute);
       if (stats.size > maxBytes) {
-        failures.push({ uri, reason: `file is ${stats.size} bytes, over the ${maxBytes} byte limit` });
-        continue;
+        return { failure: { uri, reason: `file is ${stats.size} bytes, over the ${maxBytes} byte limit` } };
       }
       const bytes = await fs.readFile(absolute);
       const text = bytes.toString("utf8");
-      if (text.includes("\u0000")) {
-        failures.push({ uri, reason: "looks like a binary file" });
-        continue;
-      }
-      documents.push({
-        id: documentId(namespace, uri),
-        namespace,
-        uri,
-        // A placeholder: parsing replaces it with the page's own title.
-        title: path.basename(uri, path.extname(uri)).replace(/[-_]+/g, " "),
-        text,
-        contentHash: sha256(bytes),
-        metadata: { bytes: stats.size, modifiedAt: stats.mtime.toISOString() },
-      });
+      if (text.includes("\u0000")) return { failure: { uri, reason: "looks like a binary file" } };
+      return {
+        document: {
+          id: documentId(namespace, uri),
+          namespace,
+          uri,
+          // A placeholder: parsing replaces it with the page's own title.
+          title: path.basename(uri, path.extname(uri)).replace(/[-_]+/g, " "),
+          text,
+          contentHash: sha256(bytes),
+          metadata: { bytes: stats.size, modifiedAt: stats.mtime.toISOString() },
+        } satisfies SourceDocument,
+      };
     } catch (error) {
-      failures.push({ uri, reason: reasonFor(error) });
+      return { failure: { uri, reason: reasonFor(error) } };
+    }
+  };
+
+  // A batch at a time: reading one file after another is latency-bound on a
+  // network share, and results stay in uri order either way.
+  const documents: SourceDocument[] = [];
+  for (let at = 0; at < targets.length; at += READ_BATCH) {
+    for (const result of await Promise.all(targets.slice(at, at + READ_BATCH).map(read))) {
+      if (result.document) documents.push(result.document);
+      else if (result.failure) failures.push(result.failure);
     }
   }
 
@@ -114,7 +126,18 @@ const isExcluded = (relative: string, patterns: readonly string[]) =>
       path.matchesGlob(relative, pattern) || path.matchesGlob(relative, pattern.replace(/\/\*\*$/, "")),
   );
 
+/** The deepest folder that holds every path given, so uris stay relative to it. */
+function commonParent(paths: readonly string[]): string {
+  if (paths.length === 0) return process.cwd();
+  const [first = "", ...rest] = paths.map((entry) => entry.split(path.sep));
+  let shared = (first as string[]).length;
+  for (const parts of rest) {
+    let i = 0;
+    while (i < shared && i < parts.length && parts[i] === (first as string[])[i]) i++;
+    shared = i;
+  }
+  return (first as string[]).slice(0, shared).join(path.sep) || path.sep;
+}
+
 /** Uris are relative and always `/`-separated, so an id is the same on any machine. */
 const toUri = (root: string, absolute: string) => path.relative(root, absolute).split(path.sep).join("/");
-
-const reasonFor = (error: unknown) => (error instanceof Error ? error.message : String(error));

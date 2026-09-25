@@ -185,3 +185,23 @@ describe("loadFiles", () => {
     expect(documents.map((document) => document.uri)).toContain("guides/notes.txt");
   });
 });
+
+describe("loadFiles across folders", () => {
+  it("gives the same ids whatever order the paths come in", async () => {
+    const a = await mkdtemp(path.join(tmpdir(), "openrag-a-"));
+    const b = await mkdtemp(path.join(tmpdir(), "openrag-b-"));
+    await writeFile(path.join(a, "one.md"), "# One\n");
+    await writeFile(path.join(b, "two.md"), "# Two\n");
+
+    const forwards = await loadFiles([path.join(a, "one.md"), path.join(b, "two.md")]);
+    const backwards = await loadFiles([path.join(b, "two.md"), path.join(a, "one.md")]);
+
+    const ids = (result: { documents: { uri: string; id: string }[] }) =>
+      Object.fromEntries(result.documents.map((document) => [document.uri, document.id]));
+    expect(ids(backwards)).toEqual(ids(forwards));
+    for (const uri of Object.keys(ids(forwards))) expect(uri.startsWith("..")).toBe(false);
+
+    await rm(a, { recursive: true, force: true });
+    await rm(b, { recursive: true, force: true });
+  });
+});

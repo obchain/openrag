@@ -19,6 +19,21 @@ export interface SourceDocument {
   indexedAt?: Date;
 }
 
+/** A source that could not be read. Always reported, never silently dropped. */
+export interface LoadFailure {
+  uri: string;
+  reason: string;
+}
+
+/**
+ * What a loader returns. The failures travel with the documents, because a
+ * partial index that looks complete is worse than a loud error.
+ */
+export interface LoadResult {
+  documents: SourceDocument[];
+  failures: LoadFailure[];
+}
+
 /** One piece of a document. Search runs over these, not whole files. */
 export interface Chunk {
   id: string;

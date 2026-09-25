@@ -4,13 +4,15 @@
 
 Point openRag at your documents and bring your own LLM. You get a chatbot backend that answers with citations, follows the conversation, and says so when the answer isn't in your docs. You own the UI and the product; openRag handles everything underneath.
 
-![Status](https://img.shields.io/badge/status-design%20phase-orange)
+![Status](https://img.shields.io/badge/status-in%20progress-yellow)
 ![Language](https://img.shields.io/badge/language-TypeScript-3178c6)
+![Tests](https://img.shields.io/badge/tests-108-brightgreen)
 
-> **Status:** openRag is in the design phase and not yet published. The API shown here is the v1 target and may change before the first release.
+> **Status:** not published yet. Ingestion is built and measured; the layers above it are designed and not written. The `Bot` API under [Quick look](#quick-look) is the v1 target, not what ships today — [What works today](#what-works-today) is what runs right now.
 
 ## Contents
 
+- [What works today](#what-works-today)
 - [Why openRag](#why-openrag)
 - [Features](#features)
 - [Quick look](#quick-look)
@@ -19,6 +21,35 @@ Point openRag at your documents and bring your own LLM. You get a chatbot backen
 - [Evaluation](#evaluation)
 - [Roadmap](#roadmap)
 - [Documentation](#documentation)
+
+## What works today
+
+Ingestion runs end to end: documents in, search-ready pieces out. Nothing above that layer exists yet, so there is no `ask()` to call.
+
+```bash
+git clone https://github.com/obchain/openrag && cd openrag
+pnpm install && pnpm build
+node scripts/try.mjs https://plausible.io/docs/2fa      # a url
+node scripts/try.mjs ./docs                             # or a folder
+```
+
+```
+size    30987 chars → 4181 after parsing
+blocks  20
+chunks  6  (tokens: median 201, max 236)
+
+  [970-1502] 226 tok · Enable two-factor authentication (2FA) › How to enable 2FA
+    * Log in to your Plausible Analytics account and in the top right menu…
+```
+
+| Built | Measured on |
+|---|---|
+| **Loaders** for a folder or a list of urls, with redirects, retries, a concurrency limit, and every failure named rather than dropped | A 134-page corpus: 134 documents, 0 failures, byte-identical on a second run |
+| **Parsers** for Markdown, MDX and HTML: clean text, a heading path, and character offsets back into the source | 16 documentation sites across Docusaurus, VitePress, Sphinx, MkDocs, Nextra, Mintlify, GitBook, Hugo and MDN. 12 clean, 2 that render their text with JavaScript (they say so rather than returning an empty document), and 2 that keep a small link list at the top |
+| **Heading-aware chunker**: 256 tokens, `page › heading` prefix, counted with the embedder's own tokenizer | 1213 chunks: hit@1 79%, hit@5 90%, MRR 0.83 on the practice question set |
+| **Incremental planning**: what to embed, what to rewrite, what to delete | A second run embeds nothing; a mid-page edit embeds 1 chunk and moves 5 |
+
+Not built yet: embedding, the store, retrieval, generation, conversation — M2 to M5 in the [roadmap](#roadmap).
 
 ## Why openRag
 
@@ -64,6 +95,8 @@ Chosen by measurement rather than opinion. The run is written up in `experiments
 
 ## Quick look
 
+*The v1 target API. None of this runs yet — see [What works today](#what-works-today).*
+
 ### Level 1: zero config
 
 ```ts
@@ -82,7 +115,7 @@ reply.citations;  // [{ uri: "docs/refunds.md", heading: "Refunds › Window", s
 ```ts
 const bot = new Bot({
   sources: ["./docs", "https://docs.example.com"],
-  llm: anthropic("claude-opus-5"),
+  llm: myModel, // any AI SDK model, or your own adapter
   store: pgvector(process.env.DATABASE_URL),
   abstain: true,
 });
@@ -220,12 +253,12 @@ The results will be published in `eval/results.md`, including the areas where op
 
 ## Roadmap
 
-openRag is the first layer of a wider chatbot framework: one that companies add to their website and that adapts to each company's data, rules and permissions. The framework is built bottom-up, and each layer ships and is useful on its own before the next one starts. See [`docs/VISION.md`](docs/VISION.md).
+openRag is the first layer of a wider chatbot framework: one that companies add to their website and that adapts to each company's data, rules and permissions. The framework is built bottom-up, and each layer ships and is useful on its own before the next one starts.
 
-- [ ] **Phase 0: Design** *(current)*. Architecture, API and default choices.
-- [ ] **Phase 1: Library**
-  - [ ] M0 Scaffold and technical spikes
-  - [ ] M1 Ingestion
+- [x] **Phase 0: Design.** Architecture, API and default choices.
+- [ ] **Phase 1: Library** *(current)*
+  - [x] M0 Scaffold and technical spikes
+  - [x] M1 Ingestion — loaders, parsers, chunker, incremental planning
   - [ ] M2 Index
   - [ ] M3 Retrieval
   - [ ] M4 Generation (Level 1 works end to end)
@@ -249,9 +282,7 @@ openRag is the first layer of a wider chatbot framework: one that companies add 
 
 | Document | Contents |
 |---|---|
-| [`openrag-arch.html`](openrag-arch.html) | Visual architecture: every layer, the chat turn, the planner and the data model. Open it in a browser. |
+| [`docs/architecture.html`](docs/architecture.html) | Visual architecture: every layer, the chat turn, the planner and the data model. Open it in a browser. |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Layer design |
-| [`docs/VISION.md`](docs/VISION.md) | The wider chatbot framework and where openRag fits |
 | [`docs/PLAN.md`](docs/PLAN.md) | Phases, milestones and success criteria |
-| [`docs/DECISIONS.md`](docs/DECISIONS.md) | Design decisions and the reasoning behind them |
-| [`docs/RESEARCH.md`](docs/RESEARCH.md) | Landscape and prior art |
+| [`experiments/m0/RESULTS.md`](experiments/m0/RESULTS.md) | The measurements behind every default, and the corpus they came from |

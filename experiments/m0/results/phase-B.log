@@ -1,0 +1,19 @@
+bge-small-en (q8): embedded 1102 pieces in 42.7 s
+e5-small-multilingual (q8): embedded 1102 pieces in 106.6 s
+embeddinggemma-300m (q8): embedded 1102 pieces in 1388.2 s
+
+Phase B: embedders + rerankers (chunker heading-256, store sqlite)
+                                    hit@1  hit@5    MRR │ exact paraph hingl
+bge-small-en · vector                 69%    88%   0.76 │   93%   87%   83%
+bge-small-en · hybrid                 60%    83%   0.71 │   93%   67%   92%
+bge-small-en · rerank ms-marco-minilm    74%    90%   0.81 │  100%   73%  100%
+bge-small-en · rerank bge-reranker-base    64%    83%   0.73 │  100%   87%   58%
+e5-small-multilingual · vector        60%    79%   0.66 │   93%   67%   75%
+e5-small-multilingual · hybrid        57%    79%   0.67 │  100%   53%   83%
+e5-small-multilingual · rerank ms-marco-minilm    74%    90%   0.80 │  100%   73%  100%
+e5-small-multilingual · rerank bge-reranker-base    67%    83%   0.73 │  100%   80%   67%
+embeddinggemma-300m · vector          76%    93%   0.83 │  100%   80%  100%
+embeddinggemma-300m · hybrid          62%    88%   0.74 │  100%   67%  100%
+embeddinggemma-300m · rerank ms-marco-minilm    79%    93%   0.83 │  100%   80%  100%
+embeddinggemma-300m · rerank bge-reranker-base    64%    83%   0.73 │  100%   73%   75%
+exit=0

@@ -1,6 +1,3 @@
-# local session guide
-CLAUDE.md
-
 # dependencies and build output
 node_modules/
 
@@ -15,3 +12,8 @@ experiments/m0/results/*.sqlite
 .DS_Store
 .env
 .env.*
+
+# build output
+dist/
+coverage/
+*.tsbuildinfo

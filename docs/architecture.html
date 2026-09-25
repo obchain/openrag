@@ -1,0 +1,690 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>openRag — Architecture</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root{
+    --bg:#0a0e16; --bg2:#0f1522; --card:#141c2c; --line:#243049;
+    --ink:#eaf0fa; --muted:#93a4c0; --faint:#64748b;
+    --aqua:#2dd4c4; --gold:#ffc56d;
+    --ing:#60a5fa; --idx:#a78bfa; --ret:#34d399; --gen:#f472b6; --conv:#ffc56d; --trc:#2dd4c4;
+    --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+    --sans:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  }
+  body.light{
+    --bg:#f7f9fc; --bg2:#eef2f8; --card:#ffffff; --line:#d8e0ec;
+    --ink:#141a26; --muted:#4a5768; --faint:#8492a6;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.65;font-size:16px;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1040px;margin:0 auto;padding:0 20px}
+  a{color:var(--aqua);text-decoration:none}
+  code,.mono{font-family:var(--mono);font-size:.88em}
+
+  header.hero{padding:44px 0 30px;border-bottom:1px solid var(--line)}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:11px}
+  .brand svg{width:30px;height:30px}
+  .brand b{font-size:1.15rem;letter-spacing:.4px}
+  .toggle{cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:6px 14px;font-size:.82rem;font-weight:600}
+  .hero h1{font-size:clamp(28px,5vw,46px);margin:22px 0 10px;font-weight:820;letter-spacing:-1px;
+    background:linear-gradient(110deg,var(--ink),var(--aqua) 55%,var(--gold) 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hero p{color:var(--muted);max-width:800px;margin:0;font-size:1.03rem}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}
+  .chip{font-size:.72rem;font-weight:700;letter-spacing:.3px;padding:4px 11px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--muted)}
+  .chip.draft{color:var(--gold);border-color:rgba(255,197,109,.4)} .chip.draft::before{content:"◐ ";color:var(--gold)}
+  .chip.ok{color:#8ff0c8;border-color:rgba(52,211,153,.4)} .chip.ok::before{content:"● ";color:#34d399}
+
+  nav.toc{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+  nav.toc .wrap{display:flex;gap:4px;flex-wrap:wrap;padding:8px 20px}
+  nav.toc a{color:var(--muted);font-size:.78rem;font-weight:600;padding:5px 9px;border-radius:7px}
+  nav.toc a:hover{color:var(--ink);background:var(--card)}
+
+  section{padding:44px 0;border-bottom:1px solid var(--line)}
+  .fignum{font-size:.72rem;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:var(--aqua)}
+  h2{font-size:clamp(21px,3.4vw,30px);margin:4px 0 6px;font-weight:800;letter-spacing:-.4px}
+  h3{font-size:1.02rem;margin:22px 0 4px;font-weight:750}
+  p{color:#cdd8ea} body.light p{color:#3a4658}
+  .muted{color:var(--muted)} .small{font-size:.9rem}
+  .fig{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin:16px 0;overflow-x:auto}
+  .fig .mermaid{display:flex;justify-content:center}
+  pre{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;overflow:auto;font-family:var(--mono);font-size:.82rem;color:var(--ink);line-height:1.55}
+  pre .c{color:var(--faint)}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:.9rem}
+  .tablewrap{overflow-x:auto}
+  th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-size:.72rem;letter-spacing:.5px;text-transform:uppercase}
+  td.mono{font-family:var(--mono);font-size:.82rem}
+  ul.clean{list-style:none;padding:0;margin:10px 0}
+  ul.clean li{padding:7px 0 7px 24px;position:relative;border-bottom:1px dashed var(--line)}
+  ul.clean li:before{content:"▸";color:var(--aqua);position:absolute;left:4px}
+  ul.clean li:last-child{border-bottom:0}
+  .tag{font-size:.68rem;font-weight:800;letter-spacing:.5px;text-transform:uppercase;padding:2px 8px;border-radius:6px;white-space:nowrap}
+  .tag.ing{color:var(--ing);background:rgba(96,165,250,.13)}
+  .tag.idx{color:var(--idx);background:rgba(167,139,250,.14)}
+  .tag.ret{color:var(--ret);background:rgba(52,211,153,.13)}
+  .tag.gen{color:var(--gen);background:rgba(244,114,182,.13)}
+  .tag.conv{color:var(--conv);background:rgba(255,197,109,.14)}
+  .tag.trc{color:var(--trc);background:rgba(45,212,196,.13)}
+  .tag.open{color:var(--gold);background:rgba(255,197,109,.14)}
+  .tag.locked{color:#34d399;background:rgba(52,211,153,.13)}
+  .callout{border-left:3px solid var(--gold);background:var(--card);padding:10px 14px;border-radius:8px;margin:14px 0;font-size:.92rem;color:var(--muted)}
+  .callout b{color:var(--gold)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media (max-width:760px){.grid2{grid-template-columns:1fr}}
+  .steps{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+  .step{border:1px solid var(--aqua);border-radius:10px;padding:8px 14px;font-size:.88rem;background:var(--bg2)}
+  .step b{display:block;color:var(--aqua);font-size:.72rem;letter-spacing:1px;text-transform:uppercase}
+  .step.later{border-color:var(--gold);border-style:dashed} .step.later b{color:var(--gold)}
+  .arrow{color:var(--faint)}
+  footer{padding:32px 0;text-align:center;color:var(--faint);font-size:.84rem}
+</style>
+</head>
+<body>
+
+<header class="hero"><div class="wrap">
+  <div class="row">
+    <div class="brand">
+      <svg viewBox="0 0 40 40" fill="none">
+        <rect x="6" y="5" width="28" height="7" rx="3.5" stroke="#ffc56d" stroke-width="2.5"/>
+        <rect x="6" y="16.5" width="28" height="7" rx="3.5" fill="#2dd4c4" opacity=".55"/>
+        <rect x="6" y="28" width="28" height="7" rx="3.5" fill="#2dd4c4"/>
+      </svg>
+      <b>openRag</b>
+    </div>
+    <button class="toggle" id="themeBtn">☾ Dark</button>
+  </div>
+  <h1>openRag — Architecture</h1>
+  <p>openRag is a TypeScript package that lets any chatbot answer questions from your own documents. You bring the documents and an LLM. openRag reads the docs, finds the right parts for each question, and gives back an answer along with its sources. It's also the first building block of a bigger chatbot framework for companies.</p>
+  <div class="chips">
+    <span class="chip draft">draft · under discussion</span>
+    <span class="chip ok">TypeScript</span>
+    <span class="chip">layer 1 of a bigger framework</span>
+    <span class="chip">tested on MTRAG-UN vs LlamaIndex</span>
+  </div>
+  <div class="callout">New to a word on this page? The <a href="#glossary">Glossary</a> at the bottom explains each one in one line.</div>
+</div></header>
+
+<nav class="toc"><div class="wrap">
+  <a href="#big">Big picture</a>
+  <a href="#basics">Who brings what</a>
+  <a href="#overview">Inside openRag</a>
+  <a href="#api">How to use it</a>
+  <a href="#layout">Packages</a>
+  <a href="#ingest">Reading docs</a>
+  <a href="#model">Storage</a>
+  <a href="#retrieval">Search</a>
+  <a href="#turn">One message</a>
+  <a href="#planner">Planner</a>
+  <a href="#trace">Trace</a>
+  <a href="#ext">Swappable parts</a>
+  <a href="#decisions">Open decisions</a>
+  <a href="#roadmap">Roadmap</a>
+  <a href="#scope">Scope</a>
+  <a href="#glossary">Glossary</a>
+</div></nav>
+
+<!-- ───────────────────────── 0. BIG PICTURE ───────────────────────── -->
+<section id="big"><div class="wrap">
+  <div class="fignum">Figure 1 · The big picture</div>
+  <h2>Where openRag fits</h2>
+  <p>The long-term goal is <b>one chatbot framework that any company can add to its website</b>. It adjusts to each company's data, rules and permissions, so nobody has to build a new chatbot from scratch every time.</p>
+  <p>Not every question needs the same kind of lookup. An order status lives in a database, live stock comes from an API, and a refund policy lives in documents. So the framework has several tools and picks the right one for each question. <b>openRag is the tool for documents</b>, and we're building it first.</p>
+  <div class="fig"><pre class="mermaid">
+flowchart TD
+  C["Customer on a company website"] --> W["Chat widget"]
+  W --> RT["Router<br/>which tool fits this question?"]
+  RT --> OR["openRag<br/>answers from documents"]
+  RT --> SQL["SQL tool<br/>orders · accounts"]
+  RT --> API["API tool<br/>live data like stock"]
+  RT --> FAQ["FAQ<br/>fixed answers"]
+  RT --> ACT["Actions<br/>refund · booking"]
+  ACT --> PERM{"Allowed by the<br/>company's rules?"}
+  PERM -->|yes| DO["Do it + record it"]
+  PERM -->|no| OWN["Ask the owner first"]
+  style OR stroke:#ffc56d,stroke-width:3px
+</pre></div>
+  <div class="tablewrap"><table>
+    <tr><th>Layer</th><th>In simple words</th><th>When</th></tr>
+    <tr><td><b>1. Knowledge</b></td><td>Tools that look up facts. openRag for documents, SQL for database records, APIs for live data, a FAQ for fixed answers.</td><td><b>openRag: now</b> (Phase 1, 2)<br/>others: Phase 3</td></tr>
+    <tr><td><b>2. Router</b></td><td>Reads the question and picks which tool (or tools) to use, then puts the results together into one answer.</td><td>Phase 3</td></tr>
+    <tr><td><b>3. Actions</b></td><td>Lets the bot <i>do</i> things, like issue a refund. Rules are checked in code before anything runs. Anything outside the rules goes to the owner for approval, and every action is recorded.</td><td>Phase 4</td></tr>
+    <tr><td><b>4. Setup</b></td><td>When a company joins, the bot looks at what they have and <i>suggests</i> a setup (sources, tools, rules). The owner reviews it and says yes. The bot never gives itself permissions.</td><td>Phase 5</td></tr>
+    <tr><td><b>5. Delivery</b></td><td>What the company actually installs: one script tag for the chat widget, plus a dashboard for approvals and logs.</td><td>Phase 5</td></tr>
+  </table></div>
+
+  <h3>What openRag has to give the framework</h3>
+  <p>Because other parts will call openRag like a tool, it needs five things from the start. Adding them later would mean rework.</p>
+  <div class="tablewrap"><table>
+    <tr><th>#</th><th>What</th><th>Why</th><th>Built in</th></tr>
+    <tr><td>1</td><td><code>retrieve()</code>: search only, no LLM</td><td>The router needs the matching doc pieces, not a finished chat answer, and shouldn't pay for an extra LLM call.</td><td>M3</td></tr>
+    <tr><td>2</td><td><code>asTool()</code></td><td>Packages openRag as a ready-made tool (name, description, inputs) that any AI agent can call.</td><td>M3</td></tr>
+    <tr><td>3</td><td>A namespace for each company</td><td>Keeps every company's data separate inside one store. Adding this later would mean moving data around, with a risk of mixing companies up.</td><td>M2</td></tr>
+    <tr><td>4</td><td>A clear "found it / didn't find it" signal</td><td>If the answer isn't in the docs, the router can try another tool or ask a human.</td><td>M3, M5</td></tr>
+    <tr><td>5</td><td>A trace format with room to grow</td><td>Later, tool calls and approvals get added to the same record, which becomes the audit log.</td><td>M6</td></tr>
+  </table></div>
+</div></section>
+
+<!-- ───────────────────────── 1. BASICS ───────────────────────── -->
+<section id="basics"><div class="wrap">
+  <div class="fignum">In one minute</div>
+  <h2>Who brings what</h2>
+  <div class="grid2">
+    <div>
+      <h3>You bring</h3>
+      <ul class="clean">
+        <li><b>Your documents:</b> a folder, some files, or website links.</li>
+        <li><b>An LLM:</b> an API key (Anthropic or OpenAI), or a free local model through Ollama.</li>
+        <li><b>Your chat screen</b>, or no screen at all if you only use openRag as a tool.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>openRag brings</h3>
+      <ul class="clean">
+        <li>Reading your docs and splitting them into small pieces.</li>
+        <li>A built-in store and embedder that run on your machine, so there's no server to set up. <span class="muted">The exact ones are picked by the M0 experiments.</span></li>
+        <li>A search that finds the right pieces for each question.</li>
+        <li>An answer with its sources, written by your LLM.</li>
+        <li>Conversation handling: memory, follow-ups, asking back, and "that's not in the docs".</li>
+        <li>A step-by-step record of every answer.</li>
+      </ul>
+    </div>
+  </div>
+  <h3>One question, start to finish</h3>
+  <ul class="clean">
+    <li><b>Before any question:</b> your docs are read, split into pieces, and saved along with their embeddings (numbers that capture meaning). This runs once, and again only for docs that change.</li>
+    <li><b>A user asks something.</b> openRag first decides: answer straight away, search the docs, or ask the user what they mean.</li>
+    <li><b>If it searches:</b> it looks for the best pieces two ways at once, by exact words and by meaning.</li>
+    <li><b>If nothing good turns up:</b> it says the answer isn't in the docs instead of guessing.</li>
+    <li><b>Otherwise:</b> it sends the question plus the best pieces to your LLM, which writes the answer with sources.</li>
+  </ul>
+</div></section>
+
+<!-- ───────────────────────── 2. SYSTEM ───────────────────────── -->
+<section id="overview"><div class="wrap">
+  <div class="fignum">Figure 2 · Inside openRag</div>
+  <h2>The parts inside openRag</h2>
+  <p>Two jobs run at different times. <b>Indexing</b> (reading your docs) runs once, then again only when docs change. <b>Chatting</b> runs every time a user sends a message. <b>Trace + Eval</b> watches every step, so any answer can be explained and measured.</p>
+  <div class="fig"><pre class="mermaid">
+flowchart TD
+  DEV["Your chatbot, app or agent"] --> API["openRag API<br/>ask() · chat() · retrieve()"]
+  API --> CONV["Conversation<br/>memory · planner · not-in-docs check"]
+  CONV --> RET["Search<br/>exact words + meaning"]
+  CONV --> GEN["Answer writing<br/>prompt · sources · word-by-word"]
+  RET --> IDX["Store<br/>pieces · embeddings · word index"]
+  SRC["Your docs<br/>folders · files · links"] --> ING["Reading docs<br/>read · clean · split · fingerprint"]
+  ING --> IDX
+  ING --> EMB["Embedder<br/>text → numbers"]
+  RET --> EMB
+  GEN --> LLM["Your LLM<br/>your key or Ollama"]
+  TR["Trace + Eval"] -.watches.-> CONV
+  TR -.-> RET
+  TR -.-> GEN
+</pre></div>
+  <div class="chips">
+    <span class="tag ing">reading docs</span> <span class="tag idx">storage</span> <span class="tag ret">search</span>
+    <span class="tag gen">answer writing</span> <span class="tag conv">conversation</span> <span class="tag trc">trace + eval</span>
+  </div>
+</div></section>
+
+<!-- ───────────────────────── 3. API ───────────────────────── -->
+<section id="api"><div class="wrap">
+  <div class="fignum">How to use it</div>
+  <h2>Four ways to use openRag</h2>
+  <p>Start with the simplest one. Each level works without the ones after it, and later versions make Level 1 smarter without you changing any code.</p>
+
+  <h3>Level 1: point it at a folder</h3>
+  <p class="small muted">openRag finds your LLM key in <code>.env</code> on its own.</p>
+<pre><span class="c">// .env → ANTHROPIC_API_KEY=…   (or OPENAI_API_KEY, or a running Ollama)</span>
+import { Bot } from "openrag";
+
+const bot = new Bot({ sources: ["./docs"] });
+const reply = await bot.ask("What is the refund policy?");
+
+reply.answer      <span class="c">// "Refunds are accepted within 30 days…"</span>
+reply.citations   <span class="c">// [{ uri: "docs/refunds.md", heading: "Refunds › Window", score: 0.82 }]</span></pre>
+
+  <h3>Level 2: a real conversation, answers typed out live</h3>
+  <p class="small muted">Instead of waiting for the full answer, you get small events as they happen: what the bot decided, each word, each source. <code>session</code> tells openRag which user's conversation this is.</p>
+<pre>const bot = new Bot({
+  sources: ["./docs", "https://docs.example.com"],
+  llm: myModel, <span class="c">// any AI SDK model, or your own adapter</span>
+  store: pgvector(process.env.DATABASE_URL),
+  abstain: true,
+});
+
+for await (const ev of bot.chat({ session: "user-42", message: "and for international orders?" })) {
+  if (ev.type === "action")   ui.status(ev.action);      <span class="c">// what the bot decided to do</span>
+  if (ev.type === "token")    ui.append(ev.text);        <span class="c">// the answer, word by word</span>
+  if (ev.type === "citation") ui.cite(ev.citation);      <span class="c">// a source</span>
+  if (ev.type === "done")     log(ev.trace);             <span class="c">// the full record</span>
+}
+
+<span class="c">// In a Next.js app, one line turns this into a live stream for the browser</span>
+export const POST = (req: Request) =&gt; bot.chat.toResponse(req);</pre>
+
+  <h3>Level 3: replace any part</h3>
+  <p class="small muted">Every part has a default. Swap in your own, or an add-on package.</p>
+<pre>const bot = new Bot({
+  sources: ["./docs"],
+  chunker:   myChunker,                             <span class="c">// your own way of splitting docs</span>
+  embedder:  voyage("voyage-3"),
+  retriever: hybrid({ lexical: 0.3, vector: 0.7 }),
+  reranker:  cohereRerank(),
+  sessions:  redisSessions(process.env.REDIS_URL),
+});</pre>
+
+  <h3>As a tool: for agents and the framework</h3>
+  <p class="small muted">No chat and no LLM call. Just "find me the right pieces", plus a flag that says whether anything good was found.</p>
+<pre>const kb = new Bot({ sources: ["./acme-docs"], namespace: "acme" });
+
+const result = await kb.retrieve("refund policy for international orders");
+result.chunks     <span class="c">// best pieces, each with source, heading and score</span>
+result.grounded   <span class="c">// false → try another tool, or ask a human</span>
+
+const tool = kb.asTool();   <span class="c">// { name, description, inputSchema, run }: plug into any agent</span></pre>
+</div></section>
+
+<!-- ───────────────────────── 4. PACKAGES ───────────────────────── -->
+<section id="layout"><div class="wrap">
+  <div class="fignum">Figure 3 · Packages</div>
+  <h2>How the code is organised</h2>
+  <p>One main package that works on its own, plus small add-on packages for optional extras. Anything heavy lives in an add-on, so the basic install stays small.</p>
+  <div class="fig"><pre class="mermaid">
+flowchart LR
+  R["openrag repo"] --> P["packages/"]
+  R --> E["eval/"]
+  R --> X["examples/"]
+  P --> CORE["openrag<br/>main package · works alone"]
+  P --> AD["@openrag/*<br/>add-ons: pgvector · openai · voyage · cohere · ai-sdk · otel"]
+  P --> SV["@openrag/server<br/>Phase 2"]
+  P --> CR["create-openrag<br/>Phase 5"]
+  E --> MT["MTRAG-UN test runner"]
+  E --> BL["LlamaIndex comparison"]
+  X --> NX["nextjs-chat"]
+  X --> CL["node-cli"]
+  X --> AT["agent-tool"]
+</pre></div>
+</div></section>
+
+<!-- ───────────────────────── 5. INGESTION ───────────────────────── -->
+<section id="ingest"><div class="wrap">
+  <span class="tag ing">Part 1 · Reading docs</span>
+  <div class="fignum" style="margin-top:6px">Figure 4 · Reading your docs</div>
+  <h2>Reading your docs: only what changed</h2>
+  <p>Each document gets a <b>fingerprint</b> (a content hash). When you index again, openRag compares fingerprints. New or edited docs are processed, unchanged docs are skipped, and deleted docs are removed from the store. So after one small edit, re-indexing a big folder is quick.</p>
+  <div class="fig"><pre class="mermaid">
+flowchart TD
+  S["Your docs<br/>folder · links"] --> L["Loader<br/>list + read files"]
+  L --> H{"Fingerprint<br/>changed?"}
+  H -->|no| SKIP["Skip it"]
+  H -->|yes| PA["Parser<br/>clean text from md · mdx · html · txt"]
+  PA --> CH["Chunker<br/>split by headings · max 256 tokens"]
+  CH --> EM["Embedder<br/>pieces → numbers, in batches"]
+  EM --> ST["Save to store<br/>piece + numbers + word index"]
+  L --> GONE["Docs that were deleted"]
+  GONE --> DEL["Remove from store"]
+</pre></div>
+  <ul class="clean">
+    <li><b>Split by headings.</b> Pieces break at the doc's own headings first. Each piece remembers where it came from (<code>Refunds › International › Window</code>), and that path shows up in the sources. How big each piece should be is decided by an experiment in M0.</li>
+    <li><b>File types in v1:</b> Markdown, MDX, plain text and HTML. PDF comes later as an add-on, because reading PDFs well is heavy.</li>
+    <li><b>No repeat work.</b> Each piece has its own fingerprint too, so an unchanged piece inside an edited doc isn't embedded again.</li>
+  </ul>
+</div></section>
+
+<!-- ───────────────────────── 6. DATA MODEL ───────────────────────── -->
+<section id="model"><div class="wrap">
+  <span class="tag idx">Part 2 · Storage</span>
+  <div class="fignum" style="margin-top:6px">Figure 5 · What gets saved</div>
+  <h2>What gets saved</h2>
+  <p>Think of it as two sets of tables, like sheets in Excel. One set holds <b>knowledge</b>: your docs, split into pieces. The other holds <b>conversations</b>: who said what, and which pieces each answer used as sources. Every document and conversation carries a <b>namespace</b>, so each company's data stays separate.</p>
+  <div class="fig"><pre class="mermaid">
+erDiagram
+  SOURCE ||--o{ DOCUMENT : contains
+  DOCUMENT ||--o{ CHUNK : split_into
+  SESSION ||--o{ TURN : has
+  TURN ||--o{ CITATION : cites
+  CITATION }o--|| CHUNK : points_to
+  DOCUMENT {
+    string id
+    string namespace
+    string uri
+    string contentHash
+    json metadata
+    datetime indexedAt
+  }
+  CHUNK {
+    string id
+    string docId
+    string text
+    string headingPath
+    int charStart
+    int charEnd
+    string chunkHash
+    vector embedding
+  }
+  SESSION {
+    string id
+    string namespace
+  }
+  TURN {
+    string id
+    string role
+    string text
+    string action
+    json trace
+  }
+</pre></div>
+  <div class="tablewrap"><table>
+    <tr><th>Box</th><th>What it is</th></tr>
+    <tr><td><b>Source</b></td><td>Where docs come from: a folder or a website.</td></tr>
+    <tr><td><b>Document</b></td><td>One file or one web page, with its fingerprint.</td></tr>
+    <tr><td><b>Chunk</b></td><td>One small piece of a document, with its embedding and its exact position in the doc (so the source can be highlighted).</td></tr>
+    <tr><td><b>Session</b></td><td>One user's conversation.</td></tr>
+    <tr><td><b>Turn</b></td><td>One message in that conversation, plus what the bot decided and its trace.</td></tr>
+    <tr><td><b>Citation</b></td><td>The link from an answer back to the exact piece it used.</td></tr>
+  </table></div>
+  <p class="small muted">Any database can be plugged in as the store if it can do four things: save pieces, delete pieces, search by meaning and search by words, each inside a namespace.</p>
+</div></section>
+
+<!-- ───────────────────────── 7. RETRIEVAL ───────────────────────── -->
+<section id="retrieval"><div class="wrap">
+  <span class="tag ret">Part 3 · Search</span>
+  <div class="fignum" style="margin-top:6px">Figure 6 · Finding the right pieces</div>
+  <h2>Finding the right pieces</h2>
+  <p>Two searches run side by side. <b>Keyword search</b> finds exact words like product names and error codes. <b>Meaning search</b> finds text that says the same thing in other words. The two result lists are merged into one ranking. Then the <b>packer</b> picks the best pieces that fit in the space the LLM allows.</p>
+  <div class="fig"><pre class="mermaid">
+flowchart TD
+  Q["The question<br/>rewritten to make sense on its own"] --> LX["Keyword search<br/>exact words · top 50"]
+  Q --> VX["Meaning search<br/>embeddings · top 50"]
+  LX --> F["Merge both lists<br/>RRF"]
+  VX --> F
+  F --> RR{"Reranker<br/>turned on?"}
+  RR -->|yes| R2["Re-sort carefully<br/>keep the best few"]
+  RR -->|no| TK["Keep the best few"]
+  R2 --> PK["Packer<br/>drop repeats · join neighbours · fit the size limit"]
+  TK --> PK
+  PK --> OUT["Best pieces + scores<br/>+ found-it flag"]
+</pre></div>
+  <div class="callout"><b>This whole box is <code>retrieve()</code>.</b> No LLM is used here, which is why the framework's router can call it quickly and cheaply.</div>
+  <ul class="clean">
+    <li><b>The reranker is on by default</b> (D-017). It's a second, slower model that re-reads the question together with each of the top 20 pieces. Measured: without it, merging the two lists at equal weight actually <i>hurts</i> reworded questions (87% → 67%). With it, the best result (90%, and the best top-1). Cost: about 0.45 s per question. Turn it off and the merge automatically shifts weight to meaning search.</li>
+    <li><b>Neighbours get joined.</b> If pieces 4 and 5 of the same doc both make the list, they're joined into one passage instead of arriving as two fragments.</li>
+    <li><b>Scores are kept.</b> They decide whether the bot says "not in the docs", they set the found-it flag, and they go into the trace.</li>
+  </ul>
+</div></section>
+
+<!-- ───────────────────────── 8. CHAT TURN ───────────────────────── -->
+<section id="turn"><div class="wrap">
+  <span class="tag conv">Part 5 · Conversation</span>
+  <div class="fignum" style="margin-top:6px">Figure 7 · One message, start to finish</div>
+  <h2>One message, start to finish</h2>
+  <p>A message doesn't always mean "search, then answer". The planner first picks one of four paths, and each one ends differently.</p>
+  <div class="fig"><pre class="mermaid">
+sequenceDiagram
+  actor U as User
+  participant App as Your app
+  participant Bot as openRag
+  participant S as Memory
+  participant P as Planner
+  participant R as Search
+  participant G as LLM
+  U->>App: "and for international orders?"
+  App->>Bot: chat(session, message)
+  Bot->>S: load earlier messages
+  Bot->>P: earlier messages + new message
+  P-->>Bot: what to do + full question
+  alt RETRIEVE
+    Bot->>R: "refund policy for international orders"
+    R-->>Bot: best pieces + scores
+    alt scores too low
+      Bot-->>App: ABSTAIN · not in the docs
+    else good match
+      Bot->>G: earlier messages + best pieces
+      G-->>App: answer word by word + sources
+    end
+  else CLARIFY
+    Bot-->>App: a question back to the user
+  else ANSWER
+    Bot->>G: earlier messages only
+    G-->>App: answer word by word
+  end
+  Bot->>S: save message + trace
+</pre></div>
+</div></section>
+
+<!-- ───────────────────────── 9. PLANNER ───────────────────────── -->
+<section id="planner"><div class="wrap">
+  <span class="tag conv">Part 5 · Conversation</span>
+  <div class="fignum" style="margin-top:6px">Figure 8 · The planner</div>
+  <h2>The planner: one decision per message</h2>
+  <p>Before doing anything, openRag asks the LLM one short question: <i>what should happen with this message?</i> The reply has three parts:</p>
+  <ul class="clean">
+    <li><b>The action:</b> answer, search, or ask back.</li>
+    <li><b>The full question:</b> the message rewritten so it makes sense on its own. <i>"and for v7?"</i> becomes <i>"how do I install version 7?"</i></li>
+    <li><b>Topic changed?</b> Yes or no.</li>
+  </ul>
+  <p>These three could each be a separate LLM call. Doing them in one call keeps the bot fast. Small talk like "thanks" or "hi" skips the call completely.</p>
+  <div class="fig"><pre class="mermaid">
+flowchart TD
+  M["New message + earlier messages"] --> HS{"Just small talk?"}
+  HS -->|yes| A1
+  HS -->|no| PL["Planner<br/>one quick LLM call"]
+  PL --> A1["ANSWER<br/>reply using what's already been shown"]
+  PL --> A2["RETRIEVE<br/>search with the full question"]
+  PL --> A3["CLARIFY<br/>question is unclear, ask back"]
+  A2 --> GR{"Found good<br/>pieces?"}
+  GR -->|yes| ANS["Answer + sources"]
+  GR -->|no| AB["ABSTAIN<br/>say it's not in the docs"]
+</pre></div>
+  <h3>The hard cases, and what openRag does</h3>
+  <p class="small muted">These are the four kinds of hard moments the MTRAG-UN test set checks.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Hard case</th><th>Example</th><th>Without care</th><th>openRag</th></tr>
+    <tr><td><b>Follow-up question</b><br/><span class="muted small">NONstandalone</span></td><td>"and for v7?"</td><td>Searched on its own, it finds junk</td><td>Rewrites it into a full question before searching</td></tr>
+    <tr><td><b>Unclear question</b><br/><span class="muted small">UNderspecified</span></td><td>"how do I cancel?" when there are three plans</td><td>Guesses and answers the wrong thing</td><td><span class="tag conv">CLARIFY</span> asks which one</td></tr>
+    <tr><td><b>Answer not in the docs</b><br/><span class="muted small">UNanswerable</span></td><td>A question the docs never cover</td><td>Confidently answers from a random piece</td><td><span class="tag conv">ABSTAIN</span> says it's not in the docs</td></tr>
+    <tr><td><b>Topic change</b></td><td>User moves from refunds to shipping</td><td>Old refund info leaks into the shipping answer</td><td>Drops the old context</td></tr>
+  </table></div>
+</div></section>
+
+<!-- ───────────────────────── 10. TRACE ───────────────────────── -->
+<section id="trace"><div class="wrap">
+  <span class="tag trc">Runs across all parts</span>
+  <div class="fignum" style="margin-top:6px">Figure 9 · Trace</div>
+  <h2>Every answer can explain itself</h2>
+  <p>Each reply comes with a <b>trace</b>: a step-by-step record of what happened. It shows what was decided, what was found, how long each step took, and how many tokens were used. Developers use it to debug <i>"why did the bot say that?"</i>, and the eval uses it to score answers. Later, the framework adds tool calls and approvals to the same record, and it becomes the audit log.</p>
+<pre>{
+  "turnId": "t_8f2a",
+  "action": "RETRIEVE",
+  "steps": [
+    { "step": "planner",   "ms": 412, "out": { "standaloneQuery": "refund policy for international orders", "topicShift": false } },
+    { "step": "lexical",   "ms": 3,   "hits": 50 },
+    { "step": "vector",    "ms": 9,   "hits": 50 },
+    { "step": "fusion",    "ms": 1,   "topScore": 0.71 },
+    { "step": "pack",      "chunks": 4, "tokens": 1830 },
+    { "step": "grounding", "passed": true, "threshold": 0.45 },
+    { "step": "generate",  "ms": 1904, "tokensIn": 2410, "tokensOut": 188 }
+  ],
+  "citations": ["docs/refunds.md#international"]
+}</pre>
+  <p class="small muted">Saved as plain JSON on the reply. Optionally, the same steps can also be sent to tools like Langfuse or Phoenix through OpenTelemetry.</p>
+</div></section>
+
+<!-- ───────────────────────── 11. EXTENSION POINTS ───────────────────────── -->
+<section id="ext"><div class="wrap">
+  <div class="fignum">Swappable parts</div>
+  <h2>Every part can be swapped</h2>
+  <p>Each part has a default that works out of the box. To use something else, plug in your own version or an add-on package.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Part</th><th>What it does</th><th>Default</th><th>Other options</th></tr>
+    <tr><td class="mono">Loader</td><td>Reads files and links</td><td>folders · links</td><td>GitHub, Notion, sitemap (later)</td></tr>
+    <tr><td class="mono">Parser</td><td>Turns a file into clean text</td><td>Markdown · MDX · HTML · text</td><td>PDF</td></tr>
+    <tr><td class="mono">Chunker</td><td>Splits text into pieces</td><td>by headings, max 256 tokens, with a <code>page › heading</code> header</td><td>fixed size, your own</td></tr>
+    <tr><td class="mono">Embedder</td><td>Turns text into numbers</td><td><code>bge-small-en</code>, local (33 MB)</td><td>OpenAI, Voyage, bigger local models</td></tr>
+    <tr><td class="mono">Store</td><td>Saves pieces and searches them</td><td>SQLite file (sqlite-vec + FTS5)</td><td>pgvector (Postgres), Qdrant</td></tr>
+    <tr><td class="mono">Retriever</td><td>Finds the best pieces</td><td>keywords + meaning, merged</td><td>your own</td></tr>
+    <tr><td class="mono">Reranker</td><td>Re-checks the order</td><td><b>on</b>: ms-marco-MiniLM, local (23 MB)</td><td>Cohere, bigger local models, off</td></tr>
+    <tr><td class="mono">LLM</td><td>Writes the answer</td><td>found from your env keys, via the AI SDK</td><td>Anthropic, OpenAI, Ollama, Google, any AI SDK model, your own</td></tr>
+    <tr><td class="mono">SessionStore</td><td>Remembers conversations</td><td>in memory</td><td>SQLite, Redis</td></tr>
+    <tr><td class="mono">Tracer</td><td>Records each step</td><td>JSON on the reply</td><td>OpenTelemetry</td></tr>
+  </table></div>
+</div></section>
+
+<!-- ───────────────────────── 12. OPEN DECISIONS ───────────────────────── -->
+<section id="decisions"><div class="wrap">
+  <div class="fignum">To discuss</div>
+  <h2>Open decisions</h2>
+  <p>All nine are now decided. A-1 and A-2 were settled by measurement, not opinion: see <code>experiments/m0/RESULTS.md</code>.</p>
+  <div class="tablewrap"><table>
+    <tr><th>#</th><th>Question</th><th>Options</th><th>Suggestion</th></tr>
+    <tr><td><span class="tag locked">A-1 · locked</span></td><td>Who turns text into numbers (the embedder)?</td><td>An online API (needs a key) · a small model on your machine (no key, bigger install)</td><td><b>Locked (D-016): <code>bge-small-en</code> on your machine</b> (33 MB). Measured 88% on the practice exam, 90% with the reranker, and 1102 pieces in 43 s. A bigger multilingual model scored 93% but took 23 minutes, so it becomes an opt-in quality option.</td></tr>
+    <tr><td><span class="tag locked">A-2 · locked</span></td><td>Where are the pieces saved (the store)?</td><td>One SQLite file · a pure-JavaScript store · LanceDB</td><td><b>Locked (D-016): one SQLite file</b> (sqlite-vec + FTS5). Its keyword search scored 76% against Orama's 43%, and the index file was 4.3 MB against 15.3 MB. For serverless production, use the Postgres add-on.</td></tr>
+    <tr><td><span class="tag locked">A-3 · locked</span></td><td>How does the bot decide what to do?</td><td>One LLM call for everything · separate steps · simple rules only</td><td><b>Locked (D-007): one call</b>, plus a quick rule that skips it for small talk.</td></tr>
+    <tr><td><span class="tag locked">A-4 · locked</span></td><td>When does it say "not in the docs"?</td><td>Search score too low · ask the LLM to check · both</td><td><b>Locked (D-008): both.</b> The score check comes first (free). Then the LLM can also report "not found" in the same call that writes the answer. The score cut-off gets tuned in M6.</td></tr>
+    <tr><td><span class="tag locked">A-5 · locked</span></td><td>What does the live stream look like in code?</td><td>A loop over events · callbacks · web streams</td><td><b>Locked (D-009): a loop over events</b> (<code>for await</code>), plus <code>toResponse()</code> for web servers. An <code>@openrag/ai-sdk</code> add-on translates the events into the Vercel AI SDK's format, so the frontend gets a ready-made chat box through <code>useChat</code>.</td></tr>
+    <tr><td><span class="tag locked">A-6 · locked</span></td><td>What format is the trace?</td><td>Our own JSON · OpenTelemetry</td><td><b>Locked (D-010): our own JSON</b> on every reply, with a version number so new step types can be added later. An <code>@openrag/otel</code> add-on sends it to dashboards, and a "hide text" option supports privacy.</td></tr>
+    <tr><td><span class="tag locked">A-7 · locked</span></td><td>Where does it run?</td><td>Node only · Node + Bun · also edge platforms</td><td><b>Locked (D-011): Node only</b> for v1 (Node 22+). Tests showed Deno works, but Bun crashed on the SQLite library, and edge platforms can't run a local store or model. Others get revisited after v1.</td></tr>
+    <tr><td><span class="tag locked">A-8 · locked</span></td><td>One package or several?</td><td>One package · a main package + add-ons</td><td><b>Locked (D-012): main package + add-ons.</b> Anything heavy, needed by only some users, or tied to another company's format becomes an add-on. Whether the local embedder goes in the main package gets decided with A-1 after M0.</td></tr>
+    <tr><td><span class="tag locked">A-9 · locked</span></td><td>Where does the LLM come from?</td><td>The developer's own key · we host one</td><td><b>The developer's own key, found automatically</b>, checked in this order: an <code>llm</code> passed in code, <code>ANTHROPIC_API_KEY</code>, <code>OPENAI_API_KEY</code>, a local Ollama. If none is found, a clear error says exactly what to set. openRag never hosts or pays for a model. <b>Locked (D-013):</b> openRag talks to the LLM through its own small interface, backed by the AI SDK, so Anthropic, OpenAI, Ollama, Google and others all work.</td></tr>
+  </table></div>
+</div></section>
+
+<!-- ───────────────────────── 13. ROADMAP ───────────────────────── -->
+<section id="roadmap"><div class="wrap">
+  <div class="fignum">Figure 10 · Roadmap</div>
+  <h2>Roadmap</h2>
+  <p>Built bottom-up. Each step ships and is useful on its own before the next one starts.</p>
+  <h3>Phase 1: the openRag library</h3>
+  <div class="fig"><div class="steps">
+    <div class="step"><b>M0</b>setup + experiments</div>
+    <span class="arrow">→</span>
+    <div class="step"><b>M1</b>reading docs</div>
+    <span class="arrow">→</span>
+    <div class="step"><b>M2</b>storage + namespaces</div>
+    <span class="arrow">→</span>
+    <div class="step"><b>M3</b>search + retrieve()</div>
+    <span class="arrow">→</span>
+    <div class="step"><b>M4</b>answers · Level 1 works</div>
+    <span class="arrow">→</span>
+    <div class="step"><b>M5</b>conversation</div>
+    <span class="arrow">→</span>
+    <div class="step"><b>M6</b>trace + eval</div>
+    <span class="arrow">→</span>
+    <div class="step"><b>M7</b>release</div>
+  </div></div>
+  <p class="small muted">M0 runs three experiments first (store, embedder, piece size), so nothing later gets built on a guess.</p>
+  <h3>After that: the framework</h3>
+  <div class="fig"><div class="steps">
+    <div class="step later"><b>Phase 2</b>openRag server</div>
+    <span class="arrow">→</span>
+    <div class="step later"><b>Phase 3</b>more tools + router</div>
+    <span class="arrow">→</span>
+    <div class="step later"><b>Phase 4</b>actions + permissions</div>
+    <span class="arrow">→</span>
+    <div class="step later"><b>Phase 5</b>setup + widget + dashboard</div>
+  </div></div>
+</div></section>
+
+<!-- ───────────────────────── 14. SCOPE ───────────────────────── -->
+<section id="scope"><div class="wrap">
+  <div class="fignum">Scope</div>
+  <h2>What "done" means for v1</h2>
+  <div class="grid2">
+    <div>
+      <h3>v1 is done when</h3>
+      <ul class="clean">
+        <li>A working bot over a folder of docs takes 3 lines of code or fewer.</li>
+        <li>Conversations work: follow-ups, asking back, "not in the docs", topic changes.</li>
+        <li>Every reply has sources and a trace.</li>
+        <li>It works as a tool: <code>retrieve()</code> and <code>asTool()</code> are used from an agent in one example.</li>
+        <li>It's compared with LlamaIndex on the same docs, including MTRAG-UN, and the results show where we lose too.</li>
+        <li>It's published under a name we own, with a README a stranger can follow.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Not in v1</h3>
+      <ul class="clean">
+        <li>A hosted service, logins, billing</li>
+        <li>Per-user permissions inside one company's docs (keeping companies apart <i>is</i> in v1)</li>
+        <li>Images and scanned pages</li>
+        <li>GraphRAG</li>
+        <li>Runtimes other than Node (Bun, Deno, edge platforms)</li>
+        <li>The router, SQL/API tools, actions and setup: later phases</li>
+      </ul>
+    </div>
+  </div>
+</div></section>
+
+<!-- ───────────────────────── 15. GLOSSARY ───────────────────────── -->
+<section id="glossary"><div class="wrap">
+  <div class="fignum">Glossary</div>
+  <h2>Words used on this page</h2>
+  <div class="tablewrap"><table>
+    <tr><th>Word</th><th>Meaning</th></tr>
+    <tr><td><b>RAG</b></td><td>Retrieval-Augmented Generation. First find the right pieces of your docs, then let the LLM answer using them.</td></tr>
+    <tr><td><b>LLM</b></td><td>The model that writes the answer: a hosted one reached through an API, or one running on your own machine.</td></tr>
+    <tr><td><b>Chunk / piece</b></td><td>A small part of a document, a few paragraphs long. Search works on pieces, not whole files.</td></tr>
+    <tr><td><b>Embedding</b></td><td>A list of numbers that captures what a piece of text means. Texts with similar meaning get similar numbers.</td></tr>
+    <tr><td><b>Embedder</b></td><td>The model that turns text into embeddings.</td></tr>
+    <tr><td><b>Meaning search (vector search)</b></td><td>Finds pieces whose embeddings are closest to the question's embedding. Catches the same idea in different words.</td></tr>
+    <tr><td><b>Keyword search (BM25)</b></td><td>Finds pieces that contain the question's exact words, giving rare words more weight.</td></tr>
+    <tr><td><b>RRF</b></td><td>Reciprocal Rank Fusion: a simple way to merge two ranked lists. Items near the top of both lists end up on top.</td></tr>
+    <tr><td><b>Reranker</b></td><td>A second model that re-reads the top results and sorts them more carefully. Slower, but more accurate.</td></tr>
+    <tr><td><b>Token</b></td><td>The unit an LLM reads text in, roughly ¾ of an English word. LLMs charge per token and can only read so many at once.</td></tr>
+    <tr><td><b>Fingerprint (content hash)</b></td><td>A short code computed from a file's content. Same code means the file hasn't changed.</td></tr>
+    <tr><td><b>Namespace</b></td><td>A label that keeps one company's data apart from another's inside the same store.</td></tr>
+    <tr><td><b>Session</b></td><td>One user's conversation, with its history.</td></tr>
+    <tr><td><b>Planner</b></td><td>The step that decides what to do with each message: answer, search, or ask back.</td></tr>
+    <tr><td><b>Abstain</b></td><td>The bot says the answer isn't in the docs instead of guessing.</td></tr>
+    <tr><td><b>Grounded</b></td><td>Backed by pieces actually found in the docs.</td></tr>
+    <tr><td><b>Citation / source</b></td><td>A link from the answer to the exact doc and section it used.</td></tr>
+    <tr><td><b>Streaming</b></td><td>Sending the answer word by word while it's being written, instead of all at the end.</td></tr>
+    <tr><td><b>SSE</b></td><td>Server-Sent Events: the standard way a web server streams text to a browser.</td></tr>
+    <tr><td><b>Trace</b></td><td>The step-by-step record of how one answer was made.</td></tr>
+    <tr><td><b>Add-on (adapter)</b></td><td>A small extra package that plugs a different tool into one part, e.g. Postgres as the store.</td></tr>
+    <tr><td><b>Tool / <code>asTool()</code></b></td><td>A function an AI agent can call. <code>asTool()</code> packages openRag as one.</td></tr>
+    <tr><td><b>Router</b></td><td>The framework part (Phase 3) that picks which tool a question needs.</td></tr>
+    <tr><td><b>Ollama</b></td><td>A free app that runs LLMs on your own computer.</td></tr>
+    <tr><td><b>pgvector</b></td><td>A Postgres add-on for meaning search. The usual choice for production.</td></tr>
+    <tr><td><b>MTRAG-UN</b></td><td>A public test set of multi-turn conversations full of hard cases: follow-ups, unclear questions, answers that aren't there. We use it to measure openRag.</td></tr>
+    <tr><td><b>LlamaIndex</b></td><td>A popular existing RAG library. We compare openRag against it.</td></tr>
+  </table></div>
+</div></section>
+
+<footer><div class="wrap">▤ openRag · the RAG layer beneath any chatbot · architecture draft · 2026-09-22</div></footer>
+
+<script>
+  const dark = { theme: "base", themeVariables: {
+    background:"#141c2c", primaryColor:"#141c2c", primaryBorderColor:"#2dd4c4", primaryTextColor:"#eaf0fa",
+    lineColor:"#5f7391", secondaryColor:"#192237", tertiaryColor:"#0f1522",
+    fontFamily:"Inter,system-ui,sans-serif", fontSize:"14px", noteBkgColor:"#1f2a42", noteTextColor:"#cdd8ea", noteBorderColor:"#2dd4c4",
+    actorBkg:"#141c2c", actorBorder:"#2dd4c4", actorTextColor:"#eaf0fa", signalColor:"#93a4c0", signalTextColor:"#eaf0fa",
+    labelBoxBkgColor:"#1f2a42", labelBoxBorderColor:"#ffc56d", labelTextColor:"#ffc56d", loopTextColor:"#cdd8ea",
+    attributeBackgroundColorOdd:"#141c2c", attributeBackgroundColorEven:"#192237"
+  }};
+  const light = { theme: "base", themeVariables: {
+    background:"#ffffff", primaryColor:"#ffffff", primaryBorderColor:"#0891b2", primaryTextColor:"#141a26",
+    lineColor:"#7a8aa0", secondaryColor:"#eef2f8", tertiaryColor:"#f7f9fc",
+    fontFamily:"Inter,system-ui,sans-serif", fontSize:"14px", noteBkgColor:"#eef2f8", noteTextColor:"#3a4658", noteBorderColor:"#0891b2",
+    actorBkg:"#ffffff", actorBorder:"#0891b2", actorTextColor:"#141a26", signalColor:"#4a5768", signalTextColor:"#141a26",
+    labelBoxBkgColor:"#eef2f8", labelBoxBorderColor:"#b7791f", labelTextColor:"#b7791f", loopTextColor:"#3a4658",
+    attributeBackgroundColorOdd:"#ffffff", attributeBackgroundColorEven:"#f7f9fc"
+  }};
+  const saved = localStorage.getItem("openrag-arch-theme") || "dark";
+  if (saved === "light") document.body.classList.add("light");
+  const btn = document.getElementById("themeBtn");
+  btn.textContent = saved === "light" ? "☀ Light" : "☾ Dark";
+  mermaid.initialize({ startOnLoad: true, ...(saved === "light" ? light : dark) });
+  btn.addEventListener("click", () => {
+    const next = document.body.classList.contains("light") ? "dark" : "light";
+    localStorage.setItem("openrag-arch-theme", next);
+    location.reload();
+  });
+</script>
+</body>
+</html>

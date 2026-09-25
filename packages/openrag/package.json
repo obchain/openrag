@@ -5,7 +5,7 @@
   "description": "The RAG layer beneath any chatbot: conversation-aware retrieval with citations",
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.14"
   },
   "exports": {
     ".": {

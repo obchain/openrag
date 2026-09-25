@@ -78,7 +78,10 @@ async function loadUrl(url: string, options: UrlOptions): Promise<Outcome> {
           accept: "text/html, text/markdown, text/plain;q=0.9, */*;q=0.1",
           ...options.headers,
         },
-        signal: deadline(timeoutMs, options.signal),
+        signal: AbortSignal.any([
+          AbortSignal.timeout(timeoutMs),
+          ...(options.signal ? [options.signal] : []),
+        ]),
       });
     } catch (error) {
       if (options.signal?.aborted) return failed("cancelled");
@@ -91,7 +94,7 @@ async function loadUrl(url: string, options: UrlOptions): Promise<Outcome> {
       const reason = `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`;
       const retryable = RETRYABLE_STATUS.has(response.status) || response.status >= 500;
       const wait = retryAfter(response) ?? backoff(attempt, retryDelayMs);
-      await discard(response);
+      void response.body?.cancel().catch(() => {});
       if (!retryable || attempt >= retries) return failed(reason);
       await sleep(wait);
       continue;
@@ -99,14 +102,8 @@ async function loadUrl(url: string, options: UrlOptions): Promise<Outcome> {
 
     const contentType = response.headers.get("content-type") ?? "";
     if (!isTextual(contentType)) {
-      await discard(response);
+      void response.body?.cancel().catch(() => {});
       return failed(`unsupported content type: ${contentType || "unknown"}`);
-    }
-
-    const declared = Number(response.headers.get("content-length"));
-    if (Number.isFinite(declared) && declared > maxBytes) {
-      await discard(response);
-      return failed(`response is ${declared} bytes, over the ${maxBytes} byte limit`);
     }
 
     let bytes: Uint8Array;
@@ -151,57 +148,24 @@ async function loadUrl(url: string, options: UrlOptions): Promise<Outcome> {
   }
 }
 
-/** The request's own timeout, plus the caller's cancellation if there is one. */
-function deadline(timeoutMs: number, signal?: AbortSignal): AbortSignal {
-  const timeout = AbortSignal.timeout(timeoutMs);
-  return signal ? AbortSignal.any([timeout, signal]) : timeout;
-}
-
 function backoff(attempt: number, base: number): number {
   return base * 2 ** attempt;
 }
 
 /** A server that says how long to wait is more reliable than our own guess. */
 function retryAfter(response: Response): number | null {
-  const header = response.headers.get("retry-after");
-  if (!header) return null;
-  const seconds = Number(header);
-  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
-  const date = Date.parse(header);
-  return Number.isNaN(date) ? null : Math.max(0, date - Date.now());
+  const seconds = Number(response.headers.get("retry-after"));
+  return Number.isFinite(seconds) ? Math.max(0, seconds * 1000) : null;
 }
 
-function isTextual(contentType: string): boolean {
-  if (contentType === "") return true; // no header: the null-byte check still guards us
-  const type = contentType.split(";")[0]?.trim().toLowerCase() ?? "";
-  return type.startsWith("text/") || /\b(html|xml|json|markdown)\b/.test(type);
-}
+/** An empty header is allowed: the null-byte check still guards us. */
+const isTextual = (contentType: string) =>
+  contentType === "" || /^text\/|html|xml|json|markdown/i.test(contentType);
 
 function titleFrom(text: string, url: string): string {
   const tag = text.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1];
-  if (tag) {
-    const title = decodeEntities(tag).replace(/\s+/g, " ").trim();
-    if (title !== "") return title;
-  }
-  const heading = text.match(/^#\s+(.+)$/m)?.[1]?.trim();
-  if (heading) return heading;
-  return titleFromUrl(url);
-}
-
-function titleFromUrl(url: string): string {
-  try {
-    const parsed = new URL(url);
-    const segment = parsed.pathname.split("/").filter(Boolean).pop();
-    if (!segment) return parsed.hostname;
-    return (
-      segment
-        .replace(/\.[^.]+$/, "")
-        .replace(/[-_]+/g, " ")
-        .trim() || parsed.hostname
-    );
-  } catch {
-    return url;
-  }
+  const title = tag && decodeEntities(tag).replace(/\s+/g, " ").trim();
+  return title || text.match(/^#\s+(.+)$/m)?.[1]?.trim() || new URL(url).pathname.split("/").pop() || url;
 }
 
 const ENTITIES: Record<string, string> = {
@@ -213,24 +177,8 @@ const ENTITIES: Record<string, string> = {
   nbsp: " ",
 };
 
-function decodeEntities(text: string): string {
-  return text.replace(/&(#\d+|#x[0-9a-f]+|\w+);/gi, (match, entity: string) => {
-    if (entity.startsWith("#x") || entity.startsWith("#X")) {
-      return String.fromCodePoint(Number.parseInt(entity.slice(2), 16));
-    }
-    if (entity.startsWith("#")) return String.fromCodePoint(Number(entity.slice(1)));
-    return ENTITIES[entity.toLowerCase()] ?? match;
-  });
-}
-
-/** Free the connection when we are not going to read the body. */
-async function discard(response: Response): Promise<void> {
-  try {
-    await response.body?.cancel();
-  } catch {
-    // nothing to release
-  }
-}
+const decodeEntities = (text: string) =>
+  text.replace(/&(\w+);/g, (match, entity: string) => ENTITIES[entity.toLowerCase()] ?? match);
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));

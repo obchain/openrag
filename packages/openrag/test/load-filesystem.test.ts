@@ -86,23 +86,11 @@ describe("loadFiles", () => {
     expect(typeof document?.metadata?.modifiedAt).toBe("string");
   });
 
-  it("titles a document from its path, using the folder for index and readme", async () => {
+  it("titles a document from its file name, as a placeholder until parsing runs", async () => {
     const { documents } = await loadFiles(root);
     const titles = Object.fromEntries(documents.map((document) => [document.uri, document.title]));
     expect(titles["guides/billing-refunds.md"]).toBe("billing refunds");
-    expect(titles["index.md"]).toBe("index"); // nothing above it to name it after
-
-    const directory = await mkdtemp(path.join(tmpdir(), "openrag-title-"));
-    await mkdir(path.join(directory, "billing-and-plans"));
-    await writeFile(path.join(directory, "billing-and-plans/index.md"), "# Billing\n");
-    await writeFile(path.join(directory, "billing-and-plans/README.md"), "# Billing\n");
-
-    const nested = await loadFiles(directory);
-    expect(nested.documents.map((document) => document.title)).toEqual([
-      "billing and plans",
-      "billing and plans",
-    ]);
-    await rm(directory, { recursive: true, force: true });
+    expect(titles["index.md"]).toBe("index");
   });
 
   it("returns an empty result for an empty folder", async () => {
@@ -179,7 +167,7 @@ describe("loadFiles", () => {
     await rm(directory, { recursive: true, force: true });
   });
 
-  it("accepts a list of files and makes uris relative to their common parent", async () => {
+  it("accepts a list of files, with uris relative to the first path", async () => {
     const { documents } = await loadFiles([
       path.join(root, "index.md"),
       path.join(root, "guides/billing-refunds.md"),

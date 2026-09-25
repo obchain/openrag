@@ -1,3 +1,8 @@
+export type { ChunkOptions } from "./chunk/chunker.js";
+export { chunkDocument, DEFAULT_MAX_TOKENS, embedText } from "./chunk/chunker.js";
+export { split } from "./chunk/split.js";
+export type { CountTokens } from "./chunk/tokens.js";
+export { estimateTokens } from "./chunk/tokens.js";
 export type { FuseInput, FuseOptions } from "./fusion.js";
 
 export { FUSION_WEIGHTS, fuse } from "./fusion.js";

@@ -46,7 +46,9 @@ export function parseMarkdown(source: string): ParsedDocument {
         pageTitle ??= heading;
         headingPath.length = 0;
       } else {
-        const level = node.depth - 2;
+        // A page that jumps from h1 to h4 still nests one level, never leaving a
+        // hole: a gap would embed as "Billing ›  ›  › Deep" and store as null.
+        const level = Math.min(node.depth - 2, headingPath.length);
         headingPath.length = Math.min(headingPath.length, level); // leaving a section closes the ones under it
         headingPath[level] = heading;
       }

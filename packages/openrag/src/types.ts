@@ -1,11 +1,12 @@
+import type { CountTokens } from "./chunk/tokens.js";
+
+export type { CountTokens };
+
 /**
  * Core interfaces. Every layer is an interface with one default implementation,
  * so any part can be swapped. An interface here is settled only once the layer
  * that implements it ships; the rest are still drafts.
  */
-
-import type { ChunkOptions } from "./chunk/chunker.js";
-import type { ParsedDocument } from "./parse/markdown.js";
 
 /** A tenant boundary. Every store call is scoped to one (D-006). */
 export type Namespace = string;
@@ -38,6 +39,48 @@ export interface LoadResult {
   failures: LoadFailure[];
 }
 
+/**
+ * One piece of a document.
+ *
+ * `text` is always `ParsedDocument.text.slice(charStart, charEnd)`. Cleaning
+ * happens by dropping whole blocks, never by editing inside one, so a citation
+ * can always point at a real span of the text that was indexed.
+ */
+export interface Block {
+  /** Section this block sits under, e.g. ["Billing", "Refunds"]. */
+  headingPath: string[];
+  text: string;
+  charStart: number;
+  charEnd: number;
+}
+
+export interface ParsedDocument {
+  /** Front matter `title` if the page declares one, else its first heading. */
+  title?: string;
+  /** The text the offsets refer to. Markdown keeps its source; HTML is converted first. */
+  text: string;
+  blocks: Block[];
+}
+
+export interface ChunkOptions {
+  /**
+   * How a piece is measured. Required, and required to be the same counter the
+   * embedder uses, because a budget counted with another ruler is a guess.
+   * `estimateTokens` is available for a run where no tokenizer is at hand, but
+   * it has to be asked for by name.
+   */
+  countTokens: CountTokens;
+  maxTokens?: number;
+  /**
+   * Prepend `page › heading` to the text that gets embedded. Measured: dropping
+   * it cost 7 points of hit@5, and code-mixed questions fell from 100% to 83%.
+   *
+   * Whatever is chosen here has to be passed to `embedText` as well, or the
+   * pieces are packed to one budget and embedded against another.
+   */
+  header?: boolean;
+}
+
 /** One piece of a document. Search runs over these, not whole files. */
 export interface Chunk {
   id: string;
@@ -49,9 +92,14 @@ export interface Chunk {
   headingPath: string[];
   text: string;
   /**
-   * Position in the parsed text the chunk came from, so a citation can highlight
-   * the exact span. For Markdown that text is the file; for HTML it is the text
-   * the page was converted to, which is what an index stores.
+   * Where the chunk sits in the parsed text it came from: Markdown keeps the
+   * file, HTML keeps the text the page was converted to, and an index has to
+   * store that same text for this to resolve.
+   *
+   * It is a span, not the text itself. A chunk packed from several blocks runs
+   * from the first to the last, so anything dropped as noise in between lies
+   * inside the span while being absent from `text`. Quote `text`; use the span
+   * to point at the source.
    */
   charStart: number;
   charEnd: number;

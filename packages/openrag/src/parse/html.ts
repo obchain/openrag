@@ -1,6 +1,7 @@
 import { NodeHtmlMarkdown } from "node-html-markdown";
 import { type HTMLElement, parse } from "node-html-parser";
-import { type ParsedDocument, parseMarkdown } from "./markdown.js";
+import type { ParsedDocument } from "../types.js";
+import { parseMarkdown } from "./markdown.js";
 
 /** Tags that never hold an answer, wherever they appear. */
 const NOISE = "script,style,noscript,iframe,svg,nav,aside,form,dialog,button";

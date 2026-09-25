@@ -1,5 +1,5 @@
-// Prove the three "done when" criteria of incremental re-indexing, on the real
-// corpus. Copies it to a temp folder so the corpus itself is never touched.
+// Prove the "done when" criteria of incremental re-indexing on the real corpus.
+// Copies it to a temp folder, so the corpus itself is never touched.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -7,70 +7,95 @@ import {
   chunkDocument,
   estimateTokens,
   loadFiles,
-  parseHtml,
-  parseMarkdown,
+  parseDocument,
   planUpdate,
 } from "../../packages/openrag/dist/index.js";
 
 const work = fs.mkdtempSync(path.join(os.tmpdir(), "openrag-incr-"));
-fs.cpSync("corpus/plausible", work, { recursive: true });
-
-const chunkOf = (document) => {
-  const parsed = /^\s*</.test(document.text) ? parseHtml(document.text, { url: document.uri }) : parseMarkdown(document.text);
-  return chunkDocument(document, parsed, { countTokens: estimateTokens });
+const results = [];
+const ok = (name, passed) => {
+  results.push(passed);
+  console.log(`${passed ? "PASS" : "FAIL"}  ${name}`);
 };
 
-/** Stands in for the store M2 will provide: what is indexed, and nothing else. */
-const index = { documents: new Map(), chunks: new Map() };
-const apply = (documents, plan) => {
-  for (const id of plan.removedDocuments) {
-    index.documents.delete(id);
-    index.chunks.delete(id);
-  }
-  const byId = new Map(documents.map((d) => [d.id, d]));
-  const touched = new Map();
-  for (const chunk of plan.embed) touched.set(chunk.docId, [...(touched.get(chunk.docId) ?? []), chunk.id]);
-  for (const chunk of plan.embed) index.documents.set(chunk.docId, byId.get(chunk.docId).contentHash);
-  for (const [docId, ids] of touched) {
-    const kept = (index.chunks.get(docId) ?? []).filter((id) => !plan.remove.includes(id));
-    index.chunks.set(docId, [...kept, ...ids]);
-  }
-  for (const id of plan.remove) {
-    for (const [docId, ids] of index.chunks) {
-      if (ids.includes(id)) index.chunks.set(docId, ids.filter((x) => x !== id));
+try {
+  fs.cpSync("corpus/plausible", work, { recursive: true });
+  const chunkOf = (document) =>
+    chunkDocument(document, parseDocument(document), { countTokens: estimateTokens });
+
+  /** Stands in for the store M2 will provide: what is indexed, and nothing else. */
+  const index = { documents: new Map(), chunks: new Map() };
+
+  const apply = (plan) => {
+    const gone = new Set(plan.remove);
+    for (const docId of plan.removedDocuments) {
+      index.documents.delete(docId);
+      index.chunks.delete(docId);
     }
-  }
-};
+    for (const { docId, contentHash } of plan.indexedDocuments) index.documents.set(docId, contentHash);
 
-const run = async (label) => {
-  const { documents } = await loadFiles(work);
-  const t = performance.now();
-  const plan = planUpdate(documents, index, chunkOf);
-  const ms = performance.now() - t;
-  apply(documents, plan);
-  console.log(
-    `${label.padEnd(34)} embed ${String(plan.embed.length).padStart(4)} | keep ${String(plan.keep.length).padStart(4)}` +
-      ` | remove ${String(plan.remove.length).padStart(3)} | ${JSON.stringify(plan.summary)} | ${Math.round(ms)}ms`,
-  );
-  return plan;
-};
+    const written = new Map();
+    for (const chunk of [...plan.embed, ...plan.restate]) {
+      written.set(chunk.docId, [...(written.get(chunk.docId) ?? []), chunk.id]);
+    }
+    for (const [docId, ids] of index.chunks) {
+      const kept = ids.filter((id) => !gone.has(id));
+      index.chunks.set(docId, written.has(docId) ? [...kept, ...(written.get(docId) ?? [])] : kept);
+    }
+    for (const [docId, ids] of written) if (!index.chunks.has(docId)) index.chunks.set(docId, ids);
+  };
 
-await run("1. first run (empty index)");
-const second = await run("2. nothing changed");
+  const run = async (label) => {
+    const load = await loadFiles(work);
+    const t = performance.now();
+    const plan = planUpdate(load, index, chunkOf);
+    const ms = performance.now() - t;
+    apply(plan);
+    console.log(
+      `${label.padEnd(36)} embed ${String(plan.embed.length).padStart(4)} | restate ${String(plan.restate.length).padStart(4)}` +
+        ` | keep ${String(plan.keep.length).padStart(4)} | remove ${String(plan.remove.length).padStart(3)} | ${Math.round(ms)}ms`,
+    );
+    console.log(`${" ".repeat(36)} ${JSON.stringify(plan.summary)}`);
+    return { plan, load };
+  };
 
-const page = path.join(work, "2fa.md");
-fs.writeFileSync(page, `${fs.readFileSync(page, "utf8")}\n## Extra section\n\nA newly added paragraph.\n`);
-const third = await run("3. one section added to one page");
+  const first = await run("1. first run (empty index)");
+  const pages = first.load.documents.length;
+  const second = await run("2. nothing changed");
 
-fs.rmSync(path.join(work, "billing.md"));
-const fourth = await run("4. one page deleted");
+  // An edit in the MIDDLE of a page: the one shape that moves everything below
+  // it, so a kept chunk carrying a stale span would show up here and nowhere else.
+  const edited = first.load.documents.find((d) => d.text.includes("\n## "));
+  const file = path.join(work, edited.uri);
+  const source = fs.readFileSync(file, "utf8");
+  const at = source.indexOf("\n## ");
+  fs.writeFileSync(file, `${source.slice(0, at)}\n\nAn inserted paragraph that shifts everything below it.\n${source.slice(at)}`);
+  const third = await run("3. a paragraph inserted mid-page");
 
-fs.rmSync(work, { recursive: true, force: true });
+  // Every chunk the plan writes must agree with a fresh chunking of the new text.
+  const after = (await loadFiles(work)).documents.find((d) => d.uri === edited.uri);
+  const fresh = new Map(chunkOf(after).map((c) => [c.id, c]));
+  const written = [...third.plan.embed, ...third.plan.restate].filter((c) => c.docId === after.id);
+  const spansAgree = written.every((c) => {
+    const truth = fresh.get(c.id);
+    return truth && truth.charStart === c.charStart && truth.charEnd === c.charEnd;
+  });
+  const movedRestated = third.plan.restate.some((c) => c.docId === after.id);
 
-const ok = (name, value) => console.log(`${value ? "PASS" : "FAIL"}  ${name}`);
-console.log();
-ok("a second run embeds nothing", second.embed.length === 0);
-ok("editing one page embeds only its new pieces", third.embed.length > 0 && third.embed.length <= 3);
-ok("every other page is untouched by that edit", third.summary.unchanged === 133);
-ok("a deleted page takes its chunks with it", fourth.removedDocuments.length === 1 && fourth.remove.length > 0);
-if (second.embed.length !== 0 || third.summary.unchanged !== 133) process.exit(1);
+  const removedPage = first.load.documents.find((d) => d.uri !== edited.uri);
+  fs.rmSync(path.join(work, removedPage.uri));
+  const fourth = await run("4. one page deleted");
+
+  console.log();
+  ok("a second run embeds nothing", second.plan.embed.length === 0);
+  ok("a second run rewrites nothing", second.plan.restate.length === 0);
+  ok("a mid-page edit embeds only the new text", third.plan.embed.length > 0 && third.plan.embed.length <= 3);
+  ok("chunks below the edit are restated, not re-embedded", movedRestated);
+  ok("every written chunk carries its true span", spansAgree);
+  ok("every other page is untouched", third.plan.summary.unchanged === pages - 1);
+  ok("a deleted page takes its chunks with it", fourth.plan.removedDocuments.length === 1 && fourth.plan.remove.length > 0);
+} finally {
+  fs.rmSync(work, { recursive: true, force: true });
+}
+
+if (results.some((passed) => !passed)) process.exit(1);

@@ -6,6 +6,8 @@ export type { FilesystemOptions } from "./load/filesystem.js";
 export { DEFAULT_EXCLUDE, DEFAULT_INCLUDE, DEFAULT_MAX_BYTES, loadFiles } from "./load/filesystem.js";
 export type { FetchLike, UrlOptions } from "./load/url.js";
 export { DEFAULT_USER_AGENT, loadUrls } from "./load/url.js";
+export type { HtmlOptions } from "./parse/html.js";
+export { parseHtml } from "./parse/html.js";
 export type { Block, ParsedDocument } from "./parse/markdown.js";
 export { parseMarkdown } from "./parse/markdown.js";
 export type {

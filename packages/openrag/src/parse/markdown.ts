@@ -1,11 +1,11 @@
 import { fromMarkdown } from "mdast-util-from-markdown";
 
 /**
- * One piece of a document, exactly as it appears in the source file.
+ * One piece of a document.
  *
- * `text` is always `source.slice(charStart, charEnd)`. Nothing is rewritten:
- * cleaning happens by dropping whole blocks, never by editing inside one. That
- * is what keeps a citation able to point at the real file.
+ * `text` is always `ParsedDocument.text.slice(charStart, charEnd)`. Cleaning
+ * happens by dropping whole blocks, never by editing inside one, so a citation
+ * can always point at a real span of the text that was indexed.
  */
 export interface Block {
   /** Section this block sits under, e.g. ["Billing", "Refunds"]. */
@@ -18,6 +18,8 @@ export interface Block {
 export interface ParsedDocument {
   /** Front matter `title` if the page declares one, else its first heading. */
   title?: string;
+  /** The text the offsets refer to. Markdown keeps its source; HTML is converted first. */
+  text: string;
   blocks: Block[];
 }
 
@@ -61,7 +63,7 @@ export function parseMarkdown(source: string): ParsedDocument {
     });
   }
 
-  return { title: title ?? pageTitle, blocks };
+  return { title: title ?? pageTitle, text: source, blocks };
 }
 
 /** MDX module lines. A parser without the MDX extension sees these as a paragraph. */

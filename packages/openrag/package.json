@@ -29,5 +29,8 @@
     "citations",
     "typescript"
   ],
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "dependencies": {
+    "mdast-util-from-markdown": "^2.0.3"
+  }
 }

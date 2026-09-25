@@ -13,6 +13,8 @@ export { DEFAULT_USER_AGENT, loadUrls } from "./load/url.js";
 export type { HtmlOptions } from "./parse/html.js";
 export { parseHtml } from "./parse/html.js";
 export { parseMarkdown } from "./parse/markdown.js";
+export type { Snapshot, UpdatePlan, UpdateSummary } from "./sync/plan.js";
+export { planUpdate } from "./sync/plan.js";
 export type {
   Block,
   ChatEvent,

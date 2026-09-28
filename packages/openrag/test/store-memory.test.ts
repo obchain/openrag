@@ -1,0 +1,440 @@
+import { describe, expect, it } from "vitest";
+import { sha256 } from "../src/hash.js";
+import { MemoryStore } from "../src/store/memory.js";
+import { planUpdate } from "../src/sync/plan.js";
+import type { Chunk, SourceDocument, StoreWrite } from "../src/types.js";
+
+const chunk = (id: string, overrides: Partial<Chunk> = {}): Chunk => ({
+  id,
+  docId: "doc-1",
+  namespace: "acme",
+  uri: "doc-1.md",
+  title: "Handbook",
+  headingPath: [],
+  text: id,
+  charStart: 0,
+  charEnd: id.length,
+  tokens: 1,
+  hash: id,
+  ...overrides,
+});
+
+const write = (overrides: Partial<StoreWrite> = {}): StoreWrite => ({
+  upsert: [],
+  restate: [],
+  removeChunks: [],
+  removeDocuments: [],
+  documents: [],
+  ...overrides,
+});
+
+/** One chunk, its vector, and the document row that owns it. */
+const one = (id: string, vector: number[], overrides: Partial<Chunk> = {}) =>
+  write({
+    upsert: [{ chunk: chunk(id, overrides), vector }],
+    documents: [{ docId: overrides.docId ?? "doc-1", contentHash: `hash-${id}` }],
+  });
+
+describe("MemoryStore snapshot", () => {
+  it("reports nothing for a namespace that was never written", async () => {
+    const snapshot = await new MemoryStore().snapshot("acme");
+    expect(snapshot.documents.size).toBe(0);
+    expect(snapshot.chunks.size).toBe(0);
+  });
+
+  it("groups chunks under their document", async () => {
+    const store = new MemoryStore();
+    await store.apply(
+      "acme",
+      write({
+        upsert: [
+          { chunk: chunk("a", { docId: "doc-1" }), vector: [1, 0] },
+          { chunk: chunk("b", { docId: "doc-1" }), vector: [0, 1] },
+          { chunk: chunk("c", { docId: "doc-2" }), vector: [1, 1] },
+        ],
+        documents: [
+          { docId: "doc-1", contentHash: "h1" },
+          { docId: "doc-2", contentHash: "h2" },
+        ],
+      }),
+    );
+
+    const snapshot = await store.snapshot("acme");
+    expect(snapshot.documents.get("doc-1")).toBe("h1");
+    expect([...(snapshot.chunks.get("doc-1") ?? [])].sort()).toEqual(["a", "b"]);
+    expect(snapshot.chunks.get("doc-2")).toEqual(["c"]);
+  });
+
+  it("keeps an entry for a document that produced no chunks", async () => {
+    // planUpdate re-chunks a document it has no chunk record for, so an empty
+    // page has to come back as an empty list rather than as nothing at all.
+    const store = new MemoryStore();
+    await store.apply("acme", write({ documents: [{ docId: "empty", contentHash: "h" }] }));
+
+    const snapshot = await store.snapshot("acme");
+    expect(snapshot.chunks.get("empty")).toEqual([]);
+    expect(snapshot.chunks.has("empty")).toBe(true);
+  });
+});
+
+describe("MemoryStore namespaces", () => {
+  it("never returns another tenant's chunk", async () => {
+    const store = new MemoryStore();
+    await store.apply("acme", one("secret", [1, 0], { text: "quarterly revenue" }));
+
+    expect(await store.vectorSearch("other", [1, 0], 10)).toEqual([]);
+    expect(await store.lexicalSearch("other", "quarterly revenue", 10)).toEqual([]);
+    expect((await store.snapshot("other")).chunks.size).toBe(0);
+  });
+
+  it("refuses a chunk whose own namespace disagrees with the call", async () => {
+    const store = new MemoryStore();
+    await expect(
+      store.apply("acme", write({ upsert: [{ chunk: chunk("a", { namespace: "other" }), vector: [1, 0] }] })),
+    ).rejects.toThrow(/belongs to namespace other/);
+  });
+});
+
+describe("MemoryStore write validation", () => {
+  it("refuses two widths in one write", async () => {
+    const store = new MemoryStore();
+    await expect(
+      store.apply(
+        "acme",
+        write({
+          upsert: [
+            { chunk: chunk("a"), vector: [1, 0] },
+            { chunk: chunk("b"), vector: [1, 0, 0] },
+          ],
+        }),
+      ),
+    ).rejects.toThrow(/3 dimensions, 2 in the same write/);
+  });
+
+  it("refuses a width the namespace does not already use", async () => {
+    const store = new MemoryStore();
+    await store.apply("acme", one("a", [1, 0]));
+    await expect(store.apply("acme", one("b", [1, 0, 0]))).rejects.toThrow(/Re-index the namespace/);
+  });
+
+  it("accepts a new width once the old chunks are going", async () => {
+    const store = new MemoryStore();
+    await store.apply("acme", one("a", [1, 0]));
+    await store.apply(
+      "acme",
+      write({
+        removeDocuments: ["doc-1"],
+        upsert: [{ chunk: chunk("b", { docId: "doc-2" }), vector: [1, 0, 0] }],
+        documents: [{ docId: "doc-2", contentHash: "h" }],
+      }),
+    );
+    expect(await store.vectorSearch("acme", [1, 0, 0], 10)).toHaveLength(1);
+  });
+
+  it.each([
+    ["an all-zero vector", [0, 0], /all-zero vector/],
+    ["a NaN", [1, Number.NaN], /non-finite value/],
+    ["an empty vector", [], /empty vector/],
+  ])("refuses %s", async (_name, vector, message) => {
+    const store = new MemoryStore();
+    await expect(store.apply("acme", one("a", vector))).rejects.toThrow(message);
+  });
+
+  it("leaves the index untouched when a write is refused", async () => {
+    const store = new MemoryStore();
+    await store.apply("acme", one("good", [1, 0], { text: "kept" }));
+
+    await expect(
+      store.apply(
+        "acme",
+        write({
+          removeChunks: ["good"],
+          removeDocuments: ["doc-1"],
+          upsert: [{ chunk: chunk("bad"), vector: [0, 0] }],
+          documents: [{ docId: "doc-1", contentHash: "new" }],
+        }),
+      ),
+    ).rejects.toThrow();
+
+    // The deletes in that write must not have happened either.
+    const snapshot = await store.snapshot("acme");
+    expect(snapshot.chunks.get("doc-1")).toEqual(["good"]);
+    expect(snapshot.documents.get("doc-1")).toBe("hash-good");
+    expect(await store.lexicalSearch("acme", "kept", 10)).toHaveLength(1);
+  });
+});
+
+describe("MemoryStore restate", () => {
+  it("moves a span without touching the vector", async () => {
+    const store = new MemoryStore();
+    await store.apply("acme", one("a", [1, 0], { charStart: 0, charEnd: 5, text: "refund window" }));
+
+    await store.apply(
+      "acme",
+      write({ restate: [chunk("a", { charStart: 120, charEnd: 125, text: "refund window" })] }),
+    );
+
+    const [hit] = await store.vectorSearch("acme", [1, 0], 10);
+    expect(hit?.chunk.charStart).toBe(120);
+    expect(hit?.score).toBeCloseTo(1);
+  });
+
+  it("refuses to restate a chunk it does not hold", async () => {
+    const store = new MemoryStore();
+    await expect(store.apply("acme", write({ restate: [chunk("ghost")] }))).rejects.toThrow(
+      /cannot restate ghost/,
+    );
+  });
+
+  it("refuses to restate a chunk the same write deletes", async () => {
+    const store = new MemoryStore();
+    await store.apply("acme", one("a", [1, 0]));
+    await expect(store.apply("acme", write({ removeChunks: ["a"], restate: [chunk("a")] }))).rejects.toThrow(
+      /cannot restate a/,
+    );
+  });
+});
+
+describe("MemoryStore deletion", () => {
+  it("drops a chunk from both searches", async () => {
+    const store = new MemoryStore();
+    await store.apply("acme", one("a", [1, 0], { text: "refund window is thirty days" }));
+    await store.apply("acme", write({ removeChunks: ["a"] }));
+
+    expect(await store.vectorSearch("acme", [1, 0], 10)).toEqual([]);
+    expect(await store.lexicalSearch("acme", "refund", 10)).toEqual([]);
+    expect((await store.snapshot("acme")).chunks.get("doc-1")).toEqual([]);
+  });
+
+  it("takes a document's chunks with it", async () => {
+    const store = new MemoryStore();
+    await store.apply(
+      "acme",
+      write({
+        upsert: [
+          { chunk: chunk("a", { docId: "doc-1" }), vector: [1, 0] },
+          { chunk: chunk("b", { docId: "doc-2" }), vector: [0, 1] },
+        ],
+        documents: [
+          { docId: "doc-1", contentHash: "h1" },
+          { docId: "doc-2", contentHash: "h2" },
+        ],
+      }),
+    );
+    await store.apply("acme", write({ removeDocuments: ["doc-1"] }));
+
+    const snapshot = await store.snapshot("acme");
+    expect(snapshot.documents.has("doc-1")).toBe(false);
+    expect(snapshot.chunks.has("doc-1")).toBe(false);
+    // A brute-force scan scores every chunk it still holds, however badly, so
+    // what proves the deletion is who is left rather than an empty list.
+    const hits = await store.vectorSearch("acme", [1, 0], 10);
+    expect(hits.map((hit) => hit.chunk.id)).toEqual(["b"]);
+  });
+});
+
+describe("MemoryStore vectorSearch", () => {
+  it("ranks by angle, not by length", async () => {
+    const store = new MemoryStore();
+    await store.apply(
+      "acme",
+      write({
+        upsert: [
+          { chunk: chunk("aligned-short"), vector: [0.1, 0] },
+          { chunk: chunk("orthogonal-long"), vector: [0, 900] },
+          { chunk: chunk("between"), vector: [1, 1] },
+        ],
+      }),
+    );
+
+    const hits = await store.vectorSearch("acme", [1, 0], 3);
+    expect(hits.map((hit) => hit.chunk.id)).toEqual(["aligned-short", "between", "orthogonal-long"]);
+    expect(hits[0]?.score).toBeCloseTo(1);
+    expect(hits[2]?.score).toBeCloseTo(0);
+  });
+
+  it("returns at most topK", async () => {
+    const store = new MemoryStore();
+    await store.apply(
+      "acme",
+      write({
+        upsert: [
+          { chunk: chunk("a"), vector: [1, 0] },
+          { chunk: chunk("b"), vector: [1, 1] },
+        ],
+      }),
+    );
+    expect(await store.vectorSearch("acme", [1, 0], 1)).toHaveLength(1);
+    expect(await store.vectorSearch("acme", [1, 0], 0)).toHaveLength(0);
+    await expect(store.vectorSearch("acme", [1, 0], -1)).rejects.toThrow(/must not be negative/);
+  });
+
+  it("refuses a query of the wrong width", async () => {
+    const store = new MemoryStore();
+    await store.apply("acme", one("a", [1, 0]));
+    await expect(store.vectorSearch("acme", [1, 0, 0], 10)).rejects.toThrow(/same embedder/);
+  });
+
+  it("refuses a zero query vector", async () => {
+    const store = new MemoryStore();
+    await store.apply("acme", one("a", [1, 0]));
+    await expect(store.vectorSearch("acme", [0, 0], 10)).rejects.toThrow(/zero vector/);
+  });
+});
+
+describe("MemoryStore lexicalSearch", () => {
+  it("finds a chunk by a word in its text", async () => {
+    const store = new MemoryStore();
+    await store.apply(
+      "acme",
+      write({
+        upsert: [
+          { chunk: chunk("refunds", { text: "A refund takes five working days." }), vector: [1, 0] },
+          { chunk: chunk("shipping", { text: "Shipping is free above 500." }), vector: [0, 1] },
+        ],
+      }),
+    );
+
+    const hits = await store.lexicalSearch("acme", "refund", 10);
+    expect(hits.map((hit) => hit.chunk.id)).toEqual(["refunds"]);
+    expect(hits[0]?.score).toBeGreaterThan(0);
+  });
+
+  it("finds a chunk by a word that appears only in its heading", async () => {
+    // The word "Refunds" is often the section title and nowhere in the prose,
+    // which is exactly the question a reader asks.
+    const store = new MemoryStore();
+    await store.apply(
+      "acme",
+      one("a", [1, 0], { headingPath: ["Billing", "Refunds"], text: "It takes five working days." }),
+    );
+    expect(await store.lexicalSearch("acme", "refunds", 10)).toHaveLength(1);
+  });
+
+  it("prefers the rarer word when a query holds both", async () => {
+    const store = new MemoryStore();
+    await store.apply(
+      "acme",
+      write({
+        upsert: [
+          { chunk: chunk("rare", { text: "the policy covers chargebacks" }), vector: [1, 0] },
+          { chunk: chunk("common-1", { text: "the policy is here" }), vector: [0, 1] },
+          { chunk: chunk("common-2", { text: "the policy is there" }), vector: [1, 1] },
+        ],
+      }),
+    );
+
+    const hits = await store.lexicalSearch("acme", "policy chargebacks", 10);
+    expect(hits[0]?.chunk.id).toBe("rare");
+  });
+
+  it("returns nothing for a query with no indexed word", async () => {
+    const store = new MemoryStore();
+    await store.apply("acme", one("a", [1, 0], { text: "refund window" }));
+    expect(await store.lexicalSearch("acme", "shipping", 10)).toEqual([]);
+    expect(await store.lexicalSearch("acme", "!!! ???", 10)).toEqual([]);
+  });
+});
+
+describe("MemoryStore with planUpdate", () => {
+  /** Same text in, same vector out, so a re-run is genuinely comparable. */
+  const embed = (text: string): number[] => [
+    (text.match(/refund/g) ?? []).length + 1,
+    (text.match(/shipping/g) ?? []).length + 1,
+    text.length % 7,
+  ];
+
+  const document = (id: string, text: string): SourceDocument => ({
+    id,
+    namespace: "acme",
+    uri: `${id}.md`,
+    title: id,
+    text,
+    contentHash: `hash:${text}`,
+  });
+
+  /** One paragraph per chunk, with ids derived from the text as the chunker does. */
+  const chunkOf = (source: SourceDocument): Chunk[] => {
+    let cursor = 0;
+    return source.text.split("\n\n").map((text) => {
+      const charStart = source.text.indexOf(text, cursor);
+      cursor = charStart + text.length;
+      // Derived from the whole text, as the real chunker does: two paragraphs
+      // that merely start alike must not collide into one id.
+      return chunk(`${source.id}-${sha256(text).slice(0, 12)}`, {
+        docId: source.id,
+        uri: source.uri,
+        title: source.id,
+        text,
+        charStart,
+        charEnd: charStart + text.length,
+      });
+    });
+  };
+
+  /** The glue an indexing run does: turn a plan plus its vectors into one write. */
+  const toWrite = (plan: ReturnType<typeof planUpdate>): StoreWrite => ({
+    upsert: plan.embed.map((piece) => ({ chunk: piece, vector: embed(piece.text) })),
+    restate: plan.restate,
+    removeChunks: plan.remove,
+    removeDocuments: plan.removedDocuments,
+    documents: plan.indexedDocuments,
+  });
+
+  const sync = async (store: MemoryStore, documents: SourceDocument[]) => {
+    const plan = planUpdate({ documents, failures: [] }, await store.snapshot("acme"), chunkOf);
+    await store.apply("acme", toWrite(plan));
+    return plan;
+  };
+
+  it("indexes, skips unchanged work, follows an edit, and forgets a deletion", async () => {
+    const store = new MemoryStore();
+    const handbook = document("doc-1", "refund window is thirty days\n\nshipping is free above 500");
+    const faq = document("doc-2", "how do I contact support");
+
+    const first = await sync(store, [handbook, faq]);
+    expect(first.embed).toHaveLength(3);
+    expect(first.summary).toMatchObject({ added: 2, updated: 0, unchanged: 0, deleted: 0 });
+    expect((await store.lexicalSearch("acme", "refund", 10))[0]?.chunk.docId).toBe("doc-1");
+
+    // Nothing changed, so nothing is embedded again.
+    const second = await sync(store, [handbook, faq]);
+    expect(second.embed).toEqual([]);
+    expect(second.summary.unchanged).toBe(2);
+
+    // Edit the first paragraph. The second one only moves.
+    const edited = document("doc-1", "refund window is now fourteen days\n\nshipping is free above 500");
+    const third = await sync(store, [edited, faq]);
+    expect(third.embed).toHaveLength(1);
+    expect(third.restate).toHaveLength(1);
+    expect(third.remove).toHaveLength(1);
+
+    const refunds = await store.lexicalSearch("acme", "fourteen", 10);
+    expect(refunds).toHaveLength(1);
+    expect(await store.lexicalSearch("acme", "thirty", 10)).toEqual([]);
+    const shipping = await store.lexicalSearch("acme", "shipping", 10);
+    expect(shipping[0]?.chunk.charStart).toBe(edited.text.indexOf("shipping"));
+
+    // Drop the FAQ from the source entirely.
+    const fourth = await sync(store, [edited]);
+    expect(fourth.removedDocuments).toEqual(["doc-2"]);
+    expect(await store.lexicalSearch("acme", "support", 10)).toEqual([]);
+    expect((await store.snapshot("acme")).documents.size).toBe(1);
+  });
+
+  it("holds a document back when the run could not read everything", async () => {
+    const store = new MemoryStore();
+    const faq = document("doc-2", "how do I contact support");
+    await sync(store, [faq]);
+
+    const plan = planUpdate(
+      { documents: [], failures: [{ uri: "doc-2.md", reason: "timed out" }] },
+      await store.snapshot("acme"),
+      chunkOf,
+    );
+    await store.apply("acme", toWrite(plan));
+
+    expect(plan.summary.held).toBe(1);
+    expect(await store.lexicalSearch("acme", "support", 10)).toHaveLength(1);
+  });
+});

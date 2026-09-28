@@ -34,7 +34,7 @@ export class MemoryStore implements Store {
     // Everything is checked before anything is written, which is how a store
     // with no transactions keeps its half of the bargain: a rejected write
     // leaves the index exactly as it was.
-    check(namespace, write, index);
+    check(namespace, write, index, this.#namespaces.values());
 
     const removed = new Set(write.removeDocuments);
     for (const docId of removed) index.documents.delete(docId);
@@ -146,7 +146,7 @@ interface Index {
  * A vector that is the wrong width, all zeroes, or carries a NaN makes cosine
  * quietly meaningless rather than loudly wrong, so each is refused at the door.
  */
-function check(namespace: Namespace, write: StoreWrite, index: Index): void {
+function check(namespace: Namespace, write: StoreWrite, index: Index, everything: Iterable<Index>): void {
   const dimensions = write.upsert[0]?.vector.length;
 
   for (const { chunk, vector } of write.upsert) {
@@ -165,21 +165,31 @@ function check(namespace: Namespace, write: StoreWrite, index: Index): void {
 
   const goneChunks = new Set(write.removeChunks);
   const goneDocuments = new Set(write.removeDocuments);
+  // A write only deletes inside the namespace it was addressed to.
   const survives = (stored: Stored) =>
-    !goneChunks.has(stored.chunk.id) && !goneDocuments.has(stored.chunk.docId);
+    stored.chunk.namespace !== namespace ||
+    (!goneChunks.has(stored.chunk.id) && !goneDocuments.has(stored.chunk.docId));
 
   if (dimensions !== undefined) {
+    // One index, one embedder — across every namespace, not just this one. A
+    // store backed by a single vector table cannot do anything else, and two
+    // widths in one index make the two tenants' scores incomparable anyway.
     // Every vector already held is the same width, so the first survivor settles
     // whether this write agrees with the index it is joining.
-    for (const stored of index.chunks.values()) {
-      if (!survives(stored)) continue;
-      if (stored.vector.length !== dimensions) {
-        throw new Error(
-          `store: writing ${dimensions}-dimension vectors into ${namespace}, which holds ` +
-            `${stored.vector.length}. Re-index the namespace after changing embedder.`,
-        );
+    for (const other of everything) {
+      let decided = false;
+      for (const stored of other.chunks.values()) {
+        if (!survives(stored)) continue;
+        if (stored.vector.length !== dimensions) {
+          throw new Error(
+            `store: writing ${dimensions}-dimension vectors into an index that holds ` +
+              `${stored.vector.length}. Re-index after changing embedder.`,
+          );
+        }
+        decided = true;
+        break;
       }
-      break;
+      if (decided) break;
     }
   }
 

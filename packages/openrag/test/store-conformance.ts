@@ -140,6 +140,22 @@ export function conformance(name: string, create: () => Store | Promise<Store>):
       await expect(store.apply("acme", one("b", [1, 0, 0]))).rejects.toThrow(/dimension/i);
     });
 
+    it("refuses a different width in another namespace", async () => {
+      // One index, one embedder. A single vector table cannot hold two widths,
+      // and scores from two embedders would not be comparable if it could.
+      const store = await fresh();
+      await store.apply("acme", one("a", [1, 0]));
+      await expect(
+        store.apply(
+          "other",
+          write({
+            upsert: [{ chunk: chunk("b", { namespace: "other" }), vector: [1, 0, 0] }],
+            documents: [{ docId: "doc-1", contentHash: "h" }],
+          }),
+        ),
+      ).rejects.toThrow(/dimension/i);
+    });
+
     it("accepts a new width once the old chunks are going", async () => {
       // Changing embedder is legitimate; it just means re-indexing the namespace.
       const store = await fresh();
@@ -244,6 +260,33 @@ export function conformance(name: string, create: () => Store | Promise<Store>):
       expect(await store.vectorSearch("acme", [1, 0], 10)).toEqual([]);
       expect(await store.lexicalSearch("acme", "refund", 10)).toEqual([]);
       expect((await store.snapshot("acme")).chunks.get("doc-1")).toEqual([]);
+    });
+
+    it("can index a new chunk after deleting the last one", async () => {
+      // A store that keys its indexes by position, and leaves a row behind when
+      // a chunk goes, fails here rather than at delete time: SQLite hands the
+      // freed rowid to the next insert. Deleting a chunk that is not the last
+      // one hides it, which is why this deletes the only one there is.
+      const store = await fresh();
+      await store.apply("acme", one("a", [1, 0], { text: "first" }));
+      await store.apply("acme", write({ removeChunks: ["a"] }));
+      await store.apply("acme", one("b", [0, 1], { text: "second" }));
+
+      const hits = await store.vectorSearch("acme", [0, 1], 5);
+      expect(hits.map((hit) => hit.chunk.id)).toEqual(["b"]);
+      expect(hits[0]?.score).toBeCloseTo(1, 3);
+      expect(await store.lexicalSearch("acme", "first", 10)).toEqual([]);
+      expect(await store.lexicalSearch("acme", "second", 10)).toHaveLength(1);
+    });
+
+    it("can index a new document after deleting the last one", async () => {
+      const store = await fresh();
+      await store.apply("acme", one("a", [1, 0], { text: "first" }));
+      await store.apply("acme", write({ removeDocuments: ["doc-1"] }));
+      await store.apply("acme", one("b", [0, 1], { docId: "doc-2", text: "second" }));
+
+      expect((await store.vectorSearch("acme", [0, 1], 5)).map((hit) => hit.chunk.id)).toEqual(["b"]);
+      expect(await store.lexicalSearch("acme", "first", 10)).toEqual([]);
     });
 
     it("takes a document's chunks with it", async () => {

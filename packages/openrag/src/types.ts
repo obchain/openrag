@@ -140,8 +140,22 @@ export interface Chunker {
 }
 
 export interface Embedder {
+  /** Model identity. Changing it invalidates every vector in an index. */
   readonly id: string;
   readonly dimensions: number;
+  /**
+   * The tokenizer this model was trained with.
+   *
+   * It is part of the interface because the chunk budget only means anything
+   * when it is counted with the same ruler the model uses (D-020): measured on
+   * the practice corpus, counting with a different tokenizer left 140 of 1102
+   * chunks over the budget they claimed to fit. `chunkDocument` takes this.
+   */
+  readonly countTokens: CountTokens;
+  /**
+   * Embed passages for indexing. A model that wants different treatment for a
+   * document and a question applies it here rather than asking the caller to.
+   */
   embedDocuments(texts: string[]): Promise<number[][]>;
   embedQuery(text: string): Promise<number[]>;
 }

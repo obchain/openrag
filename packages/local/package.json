@@ -1,0 +1,41 @@
+{
+  "name": "@openrag/local",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Local ONNX embedding for openrag: no API key, no data leaving the machine",
+  "type": "module",
+  "engines": {
+    "node": ">=22.14"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "rag",
+    "embeddings",
+    "onnx",
+    "local"
+  ],
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@huggingface/transformers": "^3.8.1"
+  },
+  "peerDependencies": {
+    "openrag": "workspace:*"
+  },
+  "devDependencies": {
+    "openrag": "workspace:*"
+  }
+}

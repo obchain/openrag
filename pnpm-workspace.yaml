@@ -5,3 +5,9 @@ packages:
 # esbuild ships a platform binary through its install script (tsup and vitest need it)
 allowBuilds:
   esbuild: true
+  # onnxruntime-node fetches the native runtime the local embedder runs on.
+  onnxruntime-node: true
+  # sharp and protobufjs come with transformers for image models. Text embedding
+  # needs neither, so their install scripts stay off.
+  protobufjs: false
+  sharp: false

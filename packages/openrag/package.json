@@ -1,0 +1,38 @@
+{
+  "name": "openrag",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The RAG layer beneath any chatbot: conversation-aware retrieval with citations",
+  "type": "module",
+  "engines": {
+    "node": ">=22.14"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --clean --sourcemap",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "rag",
+    "retrieval",
+    "chatbot",
+    "citations",
+    "typescript"
+  ],
+  "license": "UNLICENSED",
+  "dependencies": {
+    "mdast-util-from-markdown": "^2.0.3",
+    "node-html-markdown": "^2.0.0",
+    "node-html-parser": "^9.0.4"
+  }
+}

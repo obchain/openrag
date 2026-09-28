@@ -1,0 +1,7 @@
+packages:
+  - "packages/*"
+  - "examples/*"
+
+# esbuild ships a platform binary through its install script (tsup and vitest need it)
+allowBuilds:
+  esbuild: true

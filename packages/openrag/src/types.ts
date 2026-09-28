@@ -151,14 +151,58 @@ export interface Reranker {
   rerank(query: string, hits: SearchHit[], topK: number): Promise<SearchHit[]>;
 }
 
+/**
+ * What the index already holds, for one namespace. The store answers for the
+ * tenant it was asked about, so nothing here carries a namespace of its own.
+ */
+export interface Snapshot {
+  /** Document id to the content fingerprint it was indexed at. */
+  documents: ReadonlyMap<string, string>;
+  /**
+   * Document id to the chunk ids currently held for it. A document with no
+   * chunks still has an entry: an empty record is a record, and `planUpdate`
+   * reads its absence as "the index lost this one" (see sync/plan.ts).
+   */
+  chunks: ReadonlyMap<string, readonly string[]>;
+}
+
+/** A document row the caller has to write, or the next run repeats this work. */
+export interface IndexedDocument {
+  docId: string;
+  contentHash: string;
+}
+
+/**
+ * One change set, applied all at once.
+ *
+ * This is an `UpdatePlan` with the vectors filled in. It is handed over whole
+ * rather than as four separate calls because the four have to land together: a
+ * run that deletes the old pieces and then fails before writing the new ones
+ * leaves a document that is indexed, fingerprinted as current, and unsearchable.
+ */
+export interface StoreWrite {
+  /** New or changed text, each piece with the vector that was just paid for. */
+  upsert: { chunk: Chunk; vector: number[] }[];
+  /**
+   * The same text in a new place: the row is rewritten, the vector stands. The
+   * store already holds one for each of these, and is entitled to say so loudly
+   * if it does not.
+   */
+  restate: Chunk[];
+  /** Chunk ids to drop, from the vectors and from the keyword index alike. */
+  removeChunks: string[];
+  /** Documents gone from the source: their rows and any pieces still held. */
+  removeDocuments: string[];
+  /** Fingerprints to record, so an unchanged run next time really is unchanged. */
+  documents: IndexedDocument[];
+}
+
 /** Any backend that can do these four things inside a namespace can be the store. */
 export interface Store {
-  upsert(namespace: Namespace, chunks: Chunk[], vectors: number[][]): Promise<void>;
-  /** Write chunks whose vectors the index already holds, after an edit moved them. */
-  restate(namespace: Namespace, chunks: Chunk[]): Promise<void>;
-  deleteDocuments(namespace: Namespace, docIds: string[]): Promise<void>;
-  /** Incremental re-indexing removes pieces, not only whole documents. */
-  deleteChunks(namespace: Namespace, chunkIds: string[]): Promise<void>;
+  /** What this namespace already holds. Feeds `planUpdate`. */
+  snapshot(namespace: Namespace): Promise<Snapshot>;
+  /** Write one change set. Either all of it lands or none of it does. */
+  apply(namespace: Namespace, write: StoreWrite): Promise<void>;
   vectorSearch(namespace: Namespace, vector: number[], topK: number): Promise<SearchHit[]>;
   lexicalSearch(namespace: Namespace, query: string, topK: number): Promise<SearchHit[]>;
 }

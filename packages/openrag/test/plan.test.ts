@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { planUpdate, type Snapshot } from "../src/sync/plan.js";
-import type { Chunk, SourceDocument } from "../src/types.js";
+import { planUpdate } from "../src/sync/plan.js";
+import type { Chunk, Snapshot, SourceDocument } from "../src/types.js";
 
 const document = (id: string, contentHash: string): SourceDocument => ({
   id,

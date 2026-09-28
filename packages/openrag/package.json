@@ -19,7 +19,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts --clean --sourcemap",
+    "build": "tsup",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [
@@ -33,6 +33,7 @@
   "dependencies": {
     "mdast-util-from-markdown": "^2.0.3",
     "node-html-markdown": "^2.0.0",
-    "node-html-parser": "^9.0.4"
+    "node-html-parser": "^9.0.4",
+    "sqlite-vec": "^0.1.9"
   }
 }

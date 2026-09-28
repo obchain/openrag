@@ -14,7 +14,7 @@ export { parseDocument } from "./parse/document.js";
 export type { HtmlOptions } from "./parse/html.js";
 export { parseHtml } from "./parse/html.js";
 export { parseMarkdown } from "./parse/markdown.js";
-export type { IndexedDocument, Snapshot, UpdatePlan, UpdateSummary } from "./sync/plan.js";
+export type { UpdatePlan, UpdateSummary } from "./sync/plan.js";
 export { planUpdate } from "./sync/plan.js";
 export type {
   Block,
@@ -24,6 +24,7 @@ export type {
   ChunkOptions,
   Citation,
   Embedder,
+  IndexedDocument,
   LLM,
   LLMChunk,
   LoadFailure,
@@ -37,8 +38,10 @@ export type {
   RetrieveResult,
   Role,
   SearchHit,
+  Snapshot,
   SourceDocument,
   Store,
+  StoreWrite,
   Trace,
   Tracer,
   TraceStep,

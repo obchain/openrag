@@ -1,21 +1,4 @@
-import type { Chunk, LoadResult, SourceDocument } from "../types.js";
-
-/**
- * What the index already holds, for one namespace. The store answers for the
- * tenant it was asked about, so nothing here carries a namespace of its own.
- */
-export interface Snapshot {
-  /** Document id to the content fingerprint it was indexed at. */
-  documents: ReadonlyMap<string, string>;
-  /** Document id to the chunk ids currently held for it. */
-  chunks: ReadonlyMap<string, readonly string[]>;
-}
-
-/** A document row the caller has to write, or the next run repeats this work. */
-export interface IndexedDocument {
-  docId: string;
-  contentHash: string;
-}
+import type { Chunk, IndexedDocument, LoadResult, Snapshot, SourceDocument } from "../types.js";
 
 /** What to do to bring the index level with the source. */
 export interface UpdatePlan {

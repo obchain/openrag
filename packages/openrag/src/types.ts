@@ -178,6 +178,9 @@ export interface Snapshot {
    * reads its absence as "the index lost this one" (see sync/plan.ts).
    */
   chunks: ReadonlyMap<string, readonly string[]>;
+  // Order is not promised, in either map, and differs between backends. They
+  // are maps to look things up in; `planUpdate` reads them as sets, and the
+  // arrays it hands back inherit whatever order the store used.
 }
 
 /** A document row the caller has to write, or the next run repeats this work. */

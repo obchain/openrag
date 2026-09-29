@@ -1,6 +1,7 @@
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import * as sqliteVec from "sqlite-vec";
 import type { Chunk, Namespace, SearchHit, Snapshot, Store, StoreWrite } from "../types.js";
+import { checkQueryVector, checkTopK, checkWrite } from "./shared.js";
 
 /** Bumped when the tables change. A file written by a newer version is refused. */
 export const SCHEMA_VERSION = 1;
@@ -50,16 +51,33 @@ export class SqliteStore implements Store {
 
     // An existing file already knows its width, and its vector table is already
     // there. A new one finds out at its first write.
-    this.#reloadDimensions();
+    this.#width();
   }
 
-  /** Take the vector width from the file, which is the copy a rollback keeps true. */
-  #reloadDimensions(): void {
-    this.#statements.clear(); // a dropped `vec` leaves prepared statements naming it
+  /**
+   * The width the *file* holds, which is the only copy that stays true.
+   *
+   * A width remembered in this object is stale the moment another connection
+   * writes — and WAL, which every file-backed index turns on above, exists so
+   * that there can be another connection. Stale, it is not merely a wrong
+   * number: `#dropChunk` skips the vector row it should have deleted, SQLite
+   * hands the freed row id to the next insert, and `vec0` refuses the duplicate
+   * key from then on. The index becomes unwritable and nothing in it can clear
+   * the orphan.
+   */
+  #width(): number | undefined {
     const held = this.#db.prepare("select value from meta where key = 'dimensions'").get() as
       | { value: string }
       | undefined;
-    this.#dimensions = held === undefined ? undefined : Number(held.value);
+    const width = held === undefined ? undefined : Number(held.value);
+    // Only on a change, because dropping and recreating `vec` is what leaves a
+    // prepared statement naming a table that is gone — and clearing the cache
+    // on every search would throw away the whole point of preparing them.
+    if (width !== this.#dimensions) {
+      this.#dimensions = width;
+      this.#statements.clear();
+    }
+    return width;
   }
 
   /** Release the file. Nothing else may be called afterwards. */
@@ -90,10 +108,12 @@ export class SqliteStore implements Store {
 
   async apply(namespace: Namespace, write: StoreWrite): Promise<void> {
     // Cheap checks first, so an obviously bad write never opens a transaction.
-    const dimensions = validate(namespace, write);
+    const dimensions = checkWrite(namespace, write);
 
     this.#db.exec("begin immediate");
     try {
+      // Inside the transaction, so what is read cannot change under it.
+      this.#width();
       this.#remove(namespace, write);
       if (dimensions !== undefined) this.#reconcileDimensions(dimensions);
       this.#restate(namespace, write.restate);
@@ -112,21 +132,26 @@ export class SqliteStore implements Store {
       // Creating or dropping the vector table is undone by that rollback, but
       // the width this object remembers is not: left alone it would go on
       // describing a table the file no longer has.
-      this.#reloadDimensions();
+      this.#width();
       throw error;
     }
   }
 
   async vectorSearch(namespace: Namespace, vector: number[], topK: number): Promise<SearchHit[]> {
-    if (topK < 0) throw new Error(`store: topK must not be negative, got ${topK}`);
-    if (topK === 0 || this.#dimensions === undefined) return [];
-    if (vector.length !== this.#dimensions) {
+    checkTopK(topK);
+    checkQueryVector(vector);
+    // Read from the file, not remembered: another connection may have indexed
+    // the first vector, or re-indexed at a different width, since this one
+    // opened. Trusting the field here answers "no matches" for data that is
+    // sitting in the file, and names the wrong width when it does complain.
+    const dimensions = this.#width();
+    if (dimensions !== undefined && vector.length !== dimensions) {
       throw new Error(
-        `store: query has ${vector.length} dimensions, the index was written with ${this.#dimensions}. ` +
+        `store: query has ${vector.length} dimensions, the index was written with ${dimensions}. ` +
           "The query and the index need the same embedder.",
       );
     }
-    if (!vector.some((value) => value !== 0)) throw new Error("store: cannot search with a zero vector");
+    if (topK === 0 || dimensions === undefined) return [];
 
     // The k limit lives inside the vector table, so the namespace has to be a
     // partition key rather than a filter applied afterwards: filtering later
@@ -148,7 +173,7 @@ export class SqliteStore implements Store {
   }
 
   async lexicalSearch(namespace: Namespace, query: string, topK: number): Promise<SearchHit[]> {
-    if (topK < 0) throw new Error(`store: topK must not be negative, got ${topK}`);
+    checkTopK(topK);
     if (topK === 0) return [];
 
     const match = matchQuery(query);
@@ -356,39 +381,6 @@ create index if not exists chunks_by_document on chunks (namespace, doc_id);
 
 create virtual table if not exists fts using fts5(text, tokenize = 'porter unicode61');
 `;
-
-/** What can be decided without reading the database. Returns the width this write brings. */
-function validate(namespace: Namespace, write: StoreWrite): number | undefined {
-  const dimensions = write.upsert[0]?.vector.length;
-
-  for (const { chunk, vector } of write.upsert) {
-    sameNamespace(namespace, chunk);
-    if (vector.length !== dimensions) {
-      throw new Error(
-        `store: chunk ${chunk.id} has ${vector.length} dimensions, ${dimensions} in the same write. ` +
-          "One write comes from one embedder.",
-      );
-    }
-    if (vector.length === 0) throw new Error(`store: chunk ${chunk.id} has an empty vector`);
-    if (!vector.every(Number.isFinite)) {
-      throw new Error(`store: chunk ${chunk.id} has a vector with a non-finite value`);
-    }
-    if (!vector.some((value) => value !== 0))
-      throw new Error(`store: chunk ${chunk.id} has an all-zero vector`);
-  }
-  for (const chunk of write.restate) sameNamespace(namespace, chunk);
-
-  return dimensions;
-}
-
-/** A chunk written under the wrong tenant makes every citation it produces a lie. */
-function sameNamespace(namespace: Namespace, chunk: Chunk): void {
-  if (chunk.namespace !== namespace) {
-    throw new Error(
-      `store: chunk ${chunk.id} belongs to namespace ${chunk.namespace}, written to ${namespace}`,
-    );
-  }
-}
 
 const searchable = (chunk: Chunk): string => [chunk.title, ...chunk.headingPath, chunk.text].join("\n");
 

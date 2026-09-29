@@ -1,4 +1,5 @@
 import type { Chunk, Namespace, SearchHit, Snapshot, Store, StoreWrite } from "../types.js";
+import { checkQueryVector, checkTopK, checkWrite } from "./shared.js";
 
 /**
  * A store that keeps everything in the process, with no index structures.
@@ -12,6 +13,8 @@ import type { Chunk, Namespace, SearchHit, Snapshot, Store, StoreWrite } from ".
 export class MemoryStore implements Store {
   /** One index per tenant. Isolation is the shape of this map, not a filter. */
   readonly #namespaces = new Map<Namespace, Index>();
+  /** Width of every vector held, across all namespaces, or undefined if none. */
+  #dimensions: number | undefined;
 
   async snapshot(namespace: Namespace): Promise<Snapshot> {
     const index = this.#namespaces.get(namespace);
@@ -34,6 +37,7 @@ export class MemoryStore implements Store {
     // Everything is checked before anything is written, which is how a store
     // with no transactions keeps its half of the bargain: a rejected write
     // leaves the index exactly as it was.
+    checkWrite(namespace, write);
     check(namespace, write, index, this.#namespaces.values());
 
     const removed = new Set(write.removeDocuments);
@@ -45,32 +49,47 @@ export class MemoryStore implements Store {
       const held = index.chunks.get(chunk.id);
       if (held === undefined) throw new Error(`store: restate checked but lost chunk ${chunk.id}`);
       // Its vector is the thing worth keeping; the row around it is rewritten.
-      index.chunks.set(chunk.id, { ...held, ...lexical(chunk), chunk });
+      index.chunks.set(chunk.id, { ...held, ...lexical(chunk), chunk: copy(chunk) });
     }
     for (const { chunk, vector } of write.upsert) {
-      index.chunks.set(chunk.id, { chunk, vector, norm: norm(vector), ...lexical(chunk) });
+      // Copied, not referenced. A store that keeps the caller's array hands them
+      // a way to change what is indexed after the fact, and the norm cached
+      // beside it would no longer belong to the vector — cosine would keep
+      // returning numbers, just wrong ones. A backend that writes to disk is
+      // immune by accident; this one has to mean it.
+      index.chunks.set(chunk.id, {
+        chunk: copy(chunk),
+        vector: [...vector],
+        norm: norm(vector),
+        ...lexical(chunk),
+      });
     }
 
     for (const { docId, contentHash } of write.documents) index.documents.set(docId, contentHash);
 
     this.#namespaces.set(namespace, index);
+    // Kept so a namespace holding nothing still knows what shape a query must
+    // be: the width belongs to the index, not to one tenant.
+    const width = write.upsert[0]?.vector.length;
+    if (width !== undefined) this.#dimensions = width;
   }
 
   async vectorSearch(namespace: Namespace, vector: number[], topK: number): Promise<SearchHit[]> {
+    checkTopK(topK);
+    checkQueryVector(vector);
+    if (this.#dimensions !== undefined && vector.length !== this.#dimensions) {
+      throw new Error(
+        `store: query has ${vector.length} dimensions, the index was written with ${this.#dimensions}. ` +
+          "The query and the index need the same embedder.",
+      );
+    }
+
     const index = this.#namespaces.get(namespace);
-    if (index === undefined || index.chunks.size === 0) return [];
+    if (topK === 0 || index === undefined || index.chunks.size === 0) return [];
 
     const queryNorm = norm(vector);
-    if (queryNorm === 0) throw new Error("store: cannot search with a zero vector");
-
     const hits: SearchHit[] = [];
     for (const stored of index.chunks.values()) {
-      if (stored.vector.length !== vector.length) {
-        throw new Error(
-          `store: query has ${vector.length} dimensions, ${namespace} was indexed with ` +
-            `${stored.vector.length}. The query and the index need the same embedder.`,
-        );
-      }
       let dot = 0;
       for (let i = 0; i < vector.length; i++) dot += (vector[i] as number) * (stored.vector[i] as number);
       hits.push({ chunk: stored.chunk, score: dot / (queryNorm * stored.norm) });
@@ -79,8 +98,9 @@ export class MemoryStore implements Store {
   }
 
   async lexicalSearch(namespace: Namespace, query: string, topK: number): Promise<SearchHit[]> {
+    checkTopK(topK);
     const index = this.#namespaces.get(namespace);
-    if (index === undefined) return [];
+    if (topK === 0 || index === undefined) return [];
 
     const terms = [...new Set(tokenize(query))];
     if (terms.length === 0) return [];
@@ -141,28 +161,14 @@ interface Index {
 }
 
 /**
- * Everything a write has to be true for, before any of it happens.
+ * What can only be decided against what the index already holds. Everything a
+ * backend can judge on its own has been checked by `checkWrite` already.
  *
- * A vector that is the wrong width, all zeroes, or carries a NaN makes cosine
- * quietly meaningless rather than loudly wrong, so each is refused at the door.
+ * Nothing is written until all of it passes, which is how a store with no
+ * transactions keeps its half of the bargain.
  */
 function check(namespace: Namespace, write: StoreWrite, index: Index, everything: Iterable<Index>): void {
   const dimensions = write.upsert[0]?.vector.length;
-
-  for (const { chunk, vector } of write.upsert) {
-    sameNamespace(namespace, chunk);
-    if (vector.length !== dimensions) {
-      throw new Error(
-        `store: chunk ${chunk.id} has ${vector.length} dimensions, ${dimensions} in the same write. ` +
-          "One write comes from one embedder.",
-      );
-    }
-    if (vector.length === 0) throw new Error(`store: chunk ${chunk.id} has an empty vector`);
-    if (!vector.every(Number.isFinite))
-      throw new Error(`store: chunk ${chunk.id} has a vector with a non-finite value`);
-    if (norm(vector) === 0) throw new Error(`store: chunk ${chunk.id} has an all-zero vector`);
-  }
-
   const goneChunks = new Set(write.removeChunks);
   const goneDocuments = new Set(write.removeDocuments);
   // A write only deletes inside the namespace it was addressed to.
@@ -194,22 +200,12 @@ function check(namespace: Namespace, write: StoreWrite, index: Index, everything
   }
 
   for (const chunk of write.restate) {
-    sameNamespace(namespace, chunk);
     const held = index.chunks.get(chunk.id);
     // Restating is a promise that the vector is already paid for. If it is not,
     // the piece would be written without one and never match a vector search.
     if (held === undefined || !survives(held)) {
       throw new Error(`store: cannot restate ${chunk.id}, ${namespace} does not hold it. Embed it instead.`);
     }
-  }
-}
-
-/** A chunk written under the wrong tenant makes every citation it produces a lie. */
-function sameNamespace(namespace: Namespace, chunk: Chunk): void {
-  if (chunk.namespace !== namespace) {
-    throw new Error(
-      `store: chunk ${chunk.id} belongs to namespace ${chunk.namespace}, written to ${namespace}`,
-    );
   }
 }
 
@@ -234,6 +230,9 @@ function lexical(chunk: Chunk): { terms: Map<string, number>; length: number } {
  */
 const tokenize = (text: string): string[] => text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
 
+/** A chunk the caller can no longer reach into, arrays included. */
+const copy = (chunk: Chunk): Chunk => ({ ...chunk, headingPath: [...chunk.headingPath] });
+
 function norm(vector: number[]): number {
   let sum = 0;
   for (const value of vector) sum += value * value;
@@ -241,9 +240,5 @@ function norm(vector: number[]): number {
 }
 
 /** Best first, and only as many as were asked for. */
-function rank(hits: SearchHit[], topK: number): SearchHit[] {
-  // `slice(0, -1)` quietly returns everything but the last hit, which is a far
-  // stranger answer to "give me -1 results" than refusing.
-  if (topK < 0) throw new Error(`store: topK must not be negative, got ${topK}`);
-  return hits.sort((a, b) => b.score - a.score).slice(0, topK);
-}
+const rank = (hits: SearchHit[], topK: number): SearchHit[] =>
+  hits.sort((a, b) => b.score - a.score).slice(0, topK);

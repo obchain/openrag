@@ -15,6 +15,7 @@ export type { HtmlOptions } from "./parse/html.js";
 export { parseHtml } from "./parse/html.js";
 export { parseMarkdown } from "./parse/markdown.js";
 export { MemoryStore } from "./store/memory.js";
+export { MAX_TOP_K } from "./store/shared.js";
 export type { SqliteOptions } from "./store/sqlite.js";
 export { SCHEMA_VERSION, SqliteStore } from "./store/sqlite.js";
 export type { UpdatePlan, UpdateSummary } from "./sync/plan.js";

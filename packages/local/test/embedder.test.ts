@@ -41,17 +41,48 @@ describe("LocalEmbedder", () => {
     expect(vectors[0]).not.toEqual(vectors[1]);
   });
 
-  it("pays for a repeated text once and still answers for every one", async () => {
-    // Docs sites repeat boilerplate across pages; the caller should not have to
-    // notice, and the duplicates must still come back in their own positions.
+  it("gives a repeated text its own array, not a shared one", async () => {
+    // An earlier version embedded each distinct text once and handed the same
+    // array back for every copy. On the practice corpus that saved nothing —
+    // every chunk carries its own `page > heading` header, so 1215 chunks were
+    // 1215 distinct texts — and it meant a caller scaling one vector in place
+    // silently rewrote the others.
     const backend = fake();
     const embedder = await LocalEmbedder.load({ backend, batchSize: 10 });
     const vectors = await embedder.embedDocuments(["same", "other", "same"]);
 
-    expect(asked(backend)).toEqual([["same", "other"]]);
+    expect(asked(backend)).toEqual([["same", "other", "same"]]);
     expect(vectors).toHaveLength(3);
     expect(vectors[0]).toEqual(vectors[2]);
+    expect(vectors[0]).not.toBe(vectors[2]);
     expect(vectors[0]).not.toEqual(vectors[1]);
+  });
+
+  it("counts a document with the prefix the model will actually be fed", async () => {
+    // The budget the chunker spends is this count. If the prefix is added after
+    // the text was measured, a full-budget chunk loses its tail in the model's
+    // window, silently.
+    const plain = await LocalEmbedder.load({ backend: fake() });
+    const prefixed = await LocalEmbedder.load({ backend: fake(), model: "Xenova/multilingual-e5-small" });
+    expect(plain.countTokens("one two three")).toBe(3);
+    expect(prefixed.countTokens("one two three")).toBe(4); // "passage: one two three"
+  });
+
+  it("calls the backend's counter rather than copying it off", async () => {
+    // A backend written as a class is the natural shape, and a copied method
+    // loses its receiver: it either throws or returns undefined, and undefined
+    // compares under every budget the chunker tries.
+    class Counting {
+      readonly #scale = 2;
+      countTokens(text: string): number {
+        return text.split(/\s+/).filter(Boolean).length * this.#scale;
+      }
+      async run(texts: string[]): Promise<number[][]> {
+        return texts.map(() => [1, 2, 3]);
+      }
+    }
+    const embedder = await LocalEmbedder.load({ backend: new Counting() });
+    expect(embedder.countTokens("one two three")).toBe(6);
   });
 
   it("reports progress up to the number of texts it actually embeds", async () => {
@@ -110,10 +141,31 @@ describe("LocalEmbedder", () => {
     await expect(embedder.embedDocuments(["a", "b"])).rejects.toThrow(/returned 1 vectors for 2 texts/);
   });
 
-  it("refuses a model that returns nothing at all", async () => {
+  it.each([
+    ["nothing at all", [] as number[][]],
+    ["a vector of no width", [[]] as number[][]],
+  ])("refuses a model that returns %s", async (_case, result) => {
+    // A width of 0 is not caught here but far downstream, when the store
+    // refuses the write, by which point the cause is out of sight.
     await expect(
-      LocalEmbedder.load({ backend: { countTokens: () => 0, run: async () => [] } }),
+      LocalEmbedder.load({ backend: { countTokens: () => 0, run: async () => result } }),
     ).rejects.toThrow(/returned no vector/);
+  });
+
+  it("refuses a query the model answered with no vector", async () => {
+    const backend = fake();
+    const embedder = await LocalEmbedder.load({ backend });
+    backend.run = async () => [];
+    await expect(embedder.embedQuery("anything")).rejects.toThrow(/no vector for the query/);
+  });
+
+  it("batches in the measured size when it is not told one", async () => {
+    // 16 is what the timings in the class doc were taken at; every other test
+    // passes a size, so nothing else holds the default.
+    const backend = fake();
+    const embedder = await LocalEmbedder.load({ backend });
+    await embedder.embedDocuments(Array.from({ length: 17 }, (_, i) => `text ${i}`));
+    expect(asked(backend).map((batch) => batch.length)).toEqual([16, 1]);
   });
 });
 
@@ -127,8 +179,13 @@ describe("LocalEmbedder, with the real model", () => {
   it("embeds text into unit vectors that put like with like", async () => {
     const embedder = await LocalEmbedder.load();
     expect(embedder.dimensions).toBe(384);
-    // The budget the chunker spends has to be this model's own count (D-020).
-    expect(embedder.countTokens("a refund takes five working days")).toBeGreaterThan(0);
+    // The budget the chunker spends has to be this model's own count (D-020),
+    // not a stand-in. A characters-for-tokens swap passes `> 0` and leaves 140
+    // of 1102 chunks over the budget they claim to fit, which is the measurement
+    // that put `countTokens` on the interface in the first place.
+    const sentence = "a refund takes five working days";
+    expect(embedder.countTokens(sentence)).toBe(9); // 7 words + the model's two markers
+    expect(embedder.countTokens(sentence)).toBeLessThan(sentence.length / 2);
 
     const [refund, shipping] = await embedder.embedDocuments([
       "A refund takes five working days.",

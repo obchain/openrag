@@ -4,7 +4,7 @@ import type { CountTokens, Embedder } from "openrag";
 /**
  * Measured on the practice corpus (`experiments/m0/RESULTS.md`, section 2):
  * 88% hit@5 on its own, 90% with the reranker, and 1102 pieces in 43 seconds.
- * A 1.2 GB multilingual model scored 93% but indexed about 32x slower, which is
+ * A 325 MB multilingual model scored 93% but indexed about 32x slower, which is
  * hours for a mid-sized knowledge base on a laptop, so it is an opt-in rather
  * than the default.
  */
@@ -27,7 +27,7 @@ const MODELS: Record<string, ModelRecipe> = {
     pooling: "mean",
     query: (text) => `query: ${text}`,
     document: (text) => `passage: ${text}`,
-    megabytes: 120,
+    megabytes: 129,
   },
 };
 

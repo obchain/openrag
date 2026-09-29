@@ -7,7 +7,11 @@ allowBuilds:
   esbuild: true
   # onnxruntime-node fetches the native runtime the local embedder runs on.
   onnxruntime-node: true
-  # sharp and protobufjs come with transformers for image models. Text embedding
-  # needs neither, so their install scripts stay off.
+  # `transformers.node.mjs` imports sharp at the top level, so it is resolved
+  # before any of our code runs even though nothing here touches an image. Its
+  # install script falls back to building from source when no `@img/sharp-*`
+  # prebuilt matches the platform; blocked, that fallback is gone and text
+  # embedding dies at import on any machine the prebuilt missed.
+  sharp: true
+  # protobufjs only registers handlers for formats we never load.
   protobufjs: false
-  sharp: false

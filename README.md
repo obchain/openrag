@@ -6,9 +6,9 @@ Point openRag at your documents and bring your own LLM. You get a chatbot backen
 
 ![Status](https://img.shields.io/badge/status-in%20progress-yellow)
 ![Language](https://img.shields.io/badge/language-TypeScript-3178c6)
-![Tests](https://img.shields.io/badge/tests-108-brightgreen)
+![Tests](https://img.shields.io/badge/tests-200-brightgreen)
 
-> **Status:** not published yet. Ingestion is built and measured; the layers above it are designed and not written. The `Bot` API under [Quick look](#quick-look) is the v1 target, not what ships today — [What works today](#what-works-today) is what runs right now.
+> **Status:** not published yet. Ingestion and the index are built and measured — documents in, searchable pieces out, and search that works. Generation and conversation are designed and not written, so there is no `ask()` yet. The `Bot` API under [Quick look](#quick-look) is the v1 target; [What works today](#what-works-today) is what runs right now.
 
 ## Contents
 
@@ -24,32 +24,47 @@ Point openRag at your documents and bring your own LLM. You get a chatbot backen
 
 ## What works today
 
-Ingestion runs end to end: documents in, search-ready pieces out. Nothing above that layer exists yet, so there is no `ask()` to call.
+Documents in, searchable pieces out, and search over them. Nothing writes an answer yet, so there is no `ask()` to call.
 
 ```bash
 git clone https://github.com/obchain/openrag && cd openrag
 pnpm install && pnpm build
-node scripts/try.mjs https://plausible.io/docs/2fa      # a url
-node scripts/try.mjs ./docs                             # or a folder
+
+node scripts/try.mjs ./docs                                   # see how a folder is cut up
+node scripts/try.mjs https://plausible.io/docs/2fa \
+  --ask "how do I turn on two factor auth"                    # index it, then search it
 ```
 
 ```
-size    30987 chars → 4181 after parsing
-blocks  20
-chunks  6  (tokens: median 201, max 236)
+https://plausible.io/docs/2fa
+  size    30987 chars → 4181 after parsing
+  blocks  20
+  chunks  6  (tokens: median 215, max 233)
 
-  [970-1502] 226 tok · Enable two-factor authentication (2FA) › How to enable 2FA
-    * Log in to your Plausible Analytics account and in the top right menu…
+indexed 6 piece(s) in 0.2 s
+
+"how do I turn on two factor auth"
+
+  1. Enable two-factor authentication (2FA) › How to disable 2FA
+     https://plausible.io/docs/2fa [3309-3729]
+  2. Enable two-factor authentication (2FA)
+     https://plausible.io/docs/2fa [42-946]
+  3. Enable two-factor authentication (2FA) › How to enable 2FA
+     https://plausible.io/docs/2fa [970-1814]
 ```
+
+That third place is the right answer, and it is where this stops without a reranker — measured, plain fusion costs reworded questions 20 points of hit@5, and the reranker is what wins them back (M3). The number below is with one.
 
 | Built | Measured on |
 |---|---|
 | **Loaders** for a folder or a list of urls, with redirects, retries, a concurrency limit, and every failure named rather than dropped | A 134-page corpus: 134 documents, 0 failures, byte-identical on a second run |
 | **Parsers** for Markdown, MDX and HTML: clean text, a heading path, and character offsets back into the source | 16 documentation sites across Docusaurus, VitePress, Sphinx, MkDocs, Nextra, Mintlify, GitBook, Hugo and MDN. 12 clean, 2 that render their text with JavaScript (they say so rather than returning an empty document), and 2 that keep a small link list at the top |
-| **Heading-aware chunker**: 256 tokens, `page › heading` prefix, counted with the embedder's own tokenizer | 1213 chunks: hit@1 79%, hit@5 90%, MRR 0.83 on the practice question set |
-| **Incremental planning**: what to embed, what to rewrite, what to delete | A second run embeds nothing; a mid-page edit embeds 1 chunk and moves 5 |
+| **Heading-aware chunker**: 256 tokens, `page › heading` prefix, counted with the embedder's own tokenizer | 1215 chunks: hit@1 79%, hit@5 90%, MRR 0.83 on the practice question set |
+| **Incremental planning**: what to embed, what to rewrite, what to delete | A second run embeds nothing; a mid-page edit embeds 1 chunk and moves 6 |
+| **Store**: one SQLite file holding the pieces, their vectors and a keyword index, written in one transaction, scoped per tenant. An in-memory store with the same behaviour ships beside it | Both pass the same conformance suite and return the same hit rates. 5.4 MB for 1215 pieces; reopening the file re-indexes nothing |
+| **Local embedding** (`@openrag/local`): a 33 MB model on your machine, no API key and nothing leaving the process | 1215 pieces in 31 s on a laptop CPU, 384 dimensions |
 
-Not built yet: embedding, the store, retrieval, generation, conversation — M2 to M5 in the [roadmap](#roadmap).
+Not built yet: reranking, the public `retrieve()`, generation, conversation — M3 to M5 in the [roadmap](#roadmap).
 
 ## Why openRag
 
@@ -259,7 +274,7 @@ openRag is the first layer of a wider chatbot framework: one that companies add 
 - [ ] **Phase 1: Library** *(current)*
   - [x] M0 Scaffold and technical spikes
   - [x] M1 Ingestion — loaders, parsers, chunker, incremental planning
-  - [ ] M2 Index
+  - [x] M2 Index — store interface, SQLite and in-memory stores, local embedder
   - [ ] M3 Retrieval
   - [ ] M4 Generation (Level 1 works end to end)
   - [ ] M5 Conversation

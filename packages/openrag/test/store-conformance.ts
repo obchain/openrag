@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { sha256 } from "../src/hash.js";
+import { MAX_TOP_K } from "../src/store/shared.js";
 import { planUpdate } from "../src/sync/plan.js";
 import type { Chunk, SourceDocument, Store, StoreWrite } from "../src/types.js";
 
@@ -20,6 +21,16 @@ import type { Chunk, SourceDocument, Store, StoreWrite } from "../src/types.js";
  *   order and the "higher is better" direction are contract.
  * - **Recall of an approximate index.** Nothing here is large enough to make a
  *   store fall back on approximation, and exact recall is not promised.
+ * - **The order of equally-scoring hits.** A tie is a tie; which one comes first
+ *   is whatever the backend's own sort does.
+ * - **The order of a `Snapshot`'s entries.** They are maps to look things up in,
+ *   and nothing in `planUpdate` reads them in order.
+ * - **How rare a word is reckoned to be.** The SQLite store gets that from FTS5,
+ *   which counts over the whole file rather than one namespace, so another
+ *   tenant's documents shift its scores. Measured on the practice corpus with a
+ *   second tenant holding an identical copy of it, **not one of 42 questions
+ *   changed rank**, so this is a difference in the numbers and not in the
+ *   answers. Which rows come back is filtered by namespace either way.
  */
 export function conformance(name: string, create: () => Store | Promise<Store>): void {
   const open: Store[] = [];
@@ -172,12 +183,88 @@ export function conformance(name: string, create: () => Store | Promise<Store>):
     });
 
     it.each([
-      ["an all-zero vector", [0, 0]],
-      ["a non-finite value", [1, Number.NaN]],
-      ["an empty vector", []],
-    ])("refuses %s", async (_case, vector) => {
+      ["an all-zero vector", [0, 0], /all-zero/],
+      ["a non-finite value", [1, Number.NaN], /non-finite/],
+      ["an empty vector", [], /empty vector/],
+    ])("refuses %s", async (_case, vector, message) => {
+      // Each names its own message. A bare `toThrow()` is satisfied by whichever
+      // guard fires first, which lets a dead one sit there looking covered:
+      // `[].some(v => v !== 0)` is false, so the all-zero check would answer for
+      // the empty case too.
       const store = await fresh();
-      await expect(store.apply("acme", one("a", vector))).rejects.toThrow();
+      await expect(store.apply("acme", one("a", vector))).rejects.toThrow(message);
+    });
+
+    it.each([
+      ["a chunk id", { id: "a\u0000b" }],
+      ["a docId", { docId: "doc\u00001" }],
+      ["a uri", { uri: "docs/a\u0000.md" }],
+      ["the text", { text: "before\u0000after" }],
+      ["the title", { title: "Hand\u0000book" }],
+      ["the hash", { hash: "ab\u0000cd" }],
+    ])("refuses a null byte in %s", async (_case, overrides) => {
+      // SQLite hands its text to C, which stops at the first null: a 12
+      // character field comes back 6 characters long with nothing said. In an
+      // id that is permanent — `snapshot()` then reports something the source
+      // can never match, so the document re-embeds on every run, for ever.
+      const store = await fresh();
+      await expect(store.apply("acme", one("a", [1, 0], overrides))).rejects.toThrow(/null byte/);
+    });
+
+    it("refuses a null byte in a document fingerprint", async () => {
+      const store = await fresh();
+      await expect(
+        store.apply("acme", write({ documents: [{ docId: "doc-1", contentHash: "h\u0000x" }] })),
+      ).rejects.toThrow(/null byte/);
+    });
+
+    it("replaces a chunk id it already holds rather than doubling it", async () => {
+      // Every id in the suite comes from content, so an edit always makes a new
+      // one and this path is never walked by accident.
+      const store = await fresh();
+      await store.apply("acme", one("a", [1, 0], { text: "first version" }));
+      await store.apply("acme", one("a", [0, 1], { text: "second version" }));
+
+      expect((await store.snapshot("acme")).chunks.get("doc-1")).toEqual(["a"]);
+      expect(await store.lexicalSearch("acme", "first", 10)).toEqual([]);
+      const hits = await store.vectorSearch("acme", [0, 1], 10);
+      expect(hits).toHaveLength(1);
+      expect(hits[0]?.chunk.text).toBe("second version");
+    });
+
+    it("accepts a write that only deletes, against an index holding no vectors", async () => {
+      // `planUpdate` emits exactly this when a run finds only deletions, and a
+      // store given no vector yet may have no vector table to delete from.
+      const store = await fresh();
+      await expect(
+        store.apply("acme", write({ removeChunks: ["nothing"], removeDocuments: ["gone"] })),
+      ).resolves.toBeUndefined();
+    });
+
+    it("refuses a new width even when this write empties the other tenant", async () => {
+      // Two tenants sharing a docId, and a write to one that removes it: the
+      // chunks it clears belong to this namespace only, so the other tenant's
+      // vectors still stand and still decide the width.
+      const store = await fresh();
+      for (const namespace of ["acme", "other"]) {
+        await store.apply(
+          namespace,
+          write({
+            upsert: [{ chunk: chunk("shared", { namespace }), vector: [1, 0] }],
+            documents: [{ docId: "doc-1", contentHash: "h" }],
+          }),
+        );
+      }
+      await expect(
+        store.apply(
+          "acme",
+          write({
+            removeDocuments: ["doc-1"],
+            upsert: [{ chunk: chunk("new", { docId: "doc-2" }), vector: [1, 0, 0] }],
+            documents: [{ docId: "doc-2", contentHash: "h" }],
+          }),
+        ),
+      ).rejects.toThrow(/dimension/i);
     });
 
     it("leaves the index untouched when a write is refused", async () => {
@@ -220,18 +307,48 @@ export function conformance(name: string, create: () => Store | Promise<Store>):
       expect(hit?.score).toBeCloseTo(1);
     });
 
+    it("refuses to restate a chunk from another tenant", async () => {
+      // Restating writes the row again, so a foreign chunk would overwrite this
+      // tenant's uri, title and text and every citation drawn from them.
+      const store = await fresh();
+      await store.apply("acme", one("a", [1, 0]));
+      await expect(
+        store.apply("acme", write({ restate: [chunk("a", { namespace: "other" })] })),
+      ).rejects.toThrow(/namespace/);
+    });
+
+    it("moves the keyword index too, not only the row", async () => {
+      // A restated chunk keeps its vector, but its heading path may have moved.
+      // Leaving the keyword side alone makes a renamed section findable only by
+      // the name it no longer has.
+      const store = await fresh();
+      await store.apply("acme", one("a", [1, 0], { headingPath: ["Billing"], text: "five working days" }));
+      await store.apply(
+        "acme",
+        write({ restate: [chunk("a", { headingPath: ["Chargebacks"], text: "five working days" })] }),
+      );
+
+      expect(await store.lexicalSearch("acme", "chargebacks", 10)).toHaveLength(1);
+      expect(await store.lexicalSearch("acme", "billing", 10)).toEqual([]);
+    });
+
     it("refuses to restate a chunk it does not hold", async () => {
       // Without a vector the piece would be indexed and never match a search.
       const store = await fresh();
       await expect(store.apply("acme", write({ restate: [chunk("ghost")] }))).rejects.toThrow(/restate/);
     });
 
-    it("refuses to restate a chunk the same write deletes", async () => {
+    it("refuses to restate a chunk the same write deletes, and keeps it", async () => {
+      // Throwing is not enough. A store that only notices while applying has
+      // already run the delete, so the refusal has to come first.
       const store = await fresh();
-      await store.apply("acme", one("a", [1, 0]));
+      await store.apply("acme", one("a", [1, 0], { text: "kept" }));
       await expect(
         store.apply("acme", write({ removeChunks: ["a"], restate: [chunk("a")] })),
       ).rejects.toThrow(/restate/);
+
+      expect((await store.snapshot("acme")).chunks.get("doc-1")).toEqual(["a"]);
+      expect(await store.lexicalSearch("acme", "kept", 10)).toHaveLength(1);
     });
 
     it("leaves the index untouched when the restate is the part that is wrong", async () => {
@@ -338,6 +455,24 @@ export function conformance(name: string, create: () => Store | Promise<Store>):
       expect(hits[2]?.score).toBeCloseTo(0, 3);
     });
 
+    it("keeps what it was given, even if the caller reuses the array", async () => {
+      // An embedder that pools its output buffers would otherwise rewrite the
+      // index from a distance, and a norm cached beside the vector would stop
+      // belonging to it: cosine keeps returning numbers, just wrong ones.
+      const store = await fresh();
+      const vector = [1, 0];
+      const original = chunk("a", { headingPath: ["Billing"] });
+      await store.apply("acme", write({ upsert: [{ chunk: original, vector }] }));
+
+      vector[0] = 0;
+      vector[1] = 1;
+      original.headingPath.push("Refunds");
+
+      const [hit] = await store.vectorSearch("acme", [1, 0], 1);
+      expect(hit?.score).toBeCloseTo(1, 3);
+      expect(hit?.chunk.headingPath).toEqual(["Billing"]);
+    });
+
     it("returns the whole chunk, not only its id", async () => {
       // Citations are built from these fields, so a store that stored less than
       // it was given would be found here rather than in a wrong quote.
@@ -369,6 +504,54 @@ export function conformance(name: string, create: () => Store | Promise<Store>):
       expect(await store.vectorSearch("acme", [1, 0], 1)).toHaveLength(1);
       expect(await store.vectorSearch("acme", [1, 0], 0)).toHaveLength(0);
       await expect(store.vectorSearch("acme", [1, 0], -1)).rejects.toThrow();
+    });
+
+    it.each([
+      ["a negative topK", -1],
+      ["a fractional topK", 2.5],
+      ["a topK that is not a number at all", Number.NaN],
+    ])("refuses %s before it looks at what it holds", async (_case, topK) => {
+      // On a namespace that was never written, a store that answers "nothing
+      // here" first accepts a nonsense argument now and refuses it once a
+      // document lands, which makes a caller's bug look like a data problem.
+      const store = await fresh();
+      await expect(store.vectorSearch("never-written", [1, 0], topK)).rejects.toThrow(/topK/);
+      await expect(store.lexicalSearch("never-written", "anything", topK)).rejects.toThrow(/topK/);
+    });
+
+    it.each([
+      ["an all-zero query vector", [0, 0]],
+      ["an empty query vector", []],
+      ["a non-finite query vector", [1, Number.NaN]],
+    ])("refuses %s before it looks at what it holds", async (_case, vector) => {
+      const store = await fresh();
+      await expect(store.vectorSearch("never-written", vector, 10)).rejects.toThrow();
+    });
+
+    it("refuses a topK past the ceiling rather than quietly shortening the list", async () => {
+      // The vector index has a hard ceiling on one query. Capping silently would
+      // hand a caller a short vector list and a complete keyword one, and let
+      // them fuse the two as though they were the same depth.
+      const store = await fresh();
+      await store.apply("acme", one("a", [1, 0]));
+      await expect(store.vectorSearch("acme", [1, 0], MAX_TOP_K + 1)).rejects.toThrow(/limited to/);
+      await expect(store.lexicalSearch("acme", "a", MAX_TOP_K + 1)).rejects.toThrow(/limited to/);
+      expect(await store.vectorSearch("acme", [1, 0], MAX_TOP_K)).toHaveLength(1);
+    });
+
+    it("returns everything it has when topK is larger than the index", async () => {
+      const store = await fresh();
+      await store.apply(
+        "acme",
+        write({
+          upsert: [
+            { chunk: chunk("a"), vector: [1, 0] },
+            { chunk: chunk("b"), vector: [0, 1] },
+          ],
+        }),
+      );
+      expect(await store.vectorSearch("acme", [1, 0], 1000)).toHaveLength(2);
+      expect(await store.lexicalSearch("acme", "a b", 1000)).toHaveLength(2);
     });
 
     it("refuses a query of the wrong width", async () => {
@@ -448,6 +631,30 @@ export function conformance(name: string, create: () => Store | Promise<Store>):
       const scores = (await store.lexicalSearch("acme", "refund", 10)).map((hit) => hit.score);
       expect(scores).toHaveLength(2);
       expect(scores[0]).toBeGreaterThanOrEqual(scores[1] as number);
+    });
+
+    it("returns at most topK", async () => {
+      const store = await fresh();
+      await store.apply(
+        "acme",
+        write({
+          upsert: [
+            { chunk: chunk("a", { text: "refund one" }), vector: [1, 0] },
+            { chunk: chunk("b", { text: "refund two" }), vector: [0, 1] },
+            { chunk: chunk("c", { text: "refund three" }), vector: [1, 1] },
+          ],
+        }),
+      );
+      expect(await store.lexicalSearch("acme", "refund", 1)).toHaveLength(1);
+      expect(await store.lexicalSearch("acme", "refund", 2)).toHaveLength(2);
+      expect(await store.lexicalSearch("acme", "refund", 0)).toEqual([]);
+    });
+
+    it("finds a word in any script, and a number", async () => {
+      const store = await fresh();
+      await store.apply("acme", one("a", [1, 0], { text: "रिफंड 30 दिन में" }));
+      expect(await store.lexicalSearch("acme", "रिफंड", 10)).toHaveLength(1);
+      expect(await store.lexicalSearch("acme", "30", 10)).toHaveLength(1);
     });
 
     it("returns nothing for a query with no indexed word", async () => {

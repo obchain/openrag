@@ -1,6 +1,6 @@
 # Architecture
 
-_Status: **draft, under discussion.** Nothing here is decided yet except the language (TypeScript-first, D-005)._
+_Status: the layers up to and including the index are **built and measured** (M1, M2). Retrieval and above are still a design. Decisions that have been locked are marked below and written up with their reasoning in the decision log._
 
 > **Visual version: [`architecture.html`](architecture.html).** It's more detailed than this file: the big picture (where openRag fits in the framework), diagrams for every part, the chat-turn sequence, the planner, the data model, the swappable-parts table, the open decisions A-1…A-9, and a glossary. It's written in plain language.
 
@@ -77,14 +77,14 @@ The planner stays inside openRag and is optional. The framework's router calls `
 ## Questions for the architecture discussion
 
 **Shape**
-- [ ] Language (O-1), plus how that affects the default embedding/rerank story (local models are easy in Python and harder in TS)
-- [ ] Is each layer an interface with one default implementation? Where do the extension points live?
+- [x] Language (O-1), plus how that affects the default embedding/rerank story → **TypeScript-first** (D-005). The local model runs through ONNX Runtime, the same engine Python would use, and ships in `@openrag/local` so the runtime stays out of the base install (D-026)
+- [x] Is each layer an interface with one default implementation? → yes; `types.ts` holds the interfaces, the defaults sit beside them, and anything heavy or vendor-specific becomes an `@openrag/*` add-on (D-012)
 - [x] Sync vs async API; streaming as default or opt-in → `ask()` returns the whole answer, `chat()` streams `for await` events, AI SDK add-on (D-009)
 
 **Ingestion**
-- [ ] Which formats in v1 (md, txt, html, pdf?)
+- [x] Which formats in v1 → Markdown, MDX, plain text and HTML. PDF is an add-on, not core
 - [x] Chunking strategy default → heading-aware, max 256 tokens, `page › heading` header (D-016)
-- [ ] Change detection / incremental re-index: content hashing?
+- [x] Change detection / incremental re-index → content fingerprints per document, and chunk ids derived from what gets embedded, compared by a pure `planUpdate` (D-023)
 
 **Index**
 - [x] Embedded default store: which one? → SQLite + sqlite-vec + FTS5 (D-016)

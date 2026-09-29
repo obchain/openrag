@@ -20,12 +20,18 @@ const list = (...ids: string[]): SearchHit[] => ids.map((id, i) => ({ chunk: chu
 
 describe("fuse", () => {
   it("ranks a chunk that both searches found above one only a single search found", () => {
-    const fused = fuse({ lexical: list("a", "b"), vector: list("b", "c") });
+    const fused = fuse(
+      { lexical: list("a", "b"), vector: list("b", "c") },
+      { weights: FUSION_WEIGHTS.withReranker },
+    );
     expect(fused[0]?.chunk.id).toBe("b");
   });
 
   it("ties when each search puts a different chunk first at equal weight", () => {
-    const fused = fuse({ lexical: list("noise", "answer"), vector: list("answer", "noise") });
+    const fused = fuse(
+      { lexical: list("noise", "answer"), vector: list("answer", "noise") },
+      { weights: FUSION_WEIGHTS.withReranker },
+    );
     expect(fused[0]?.score).toBeCloseTo(fused[1]?.score ?? 0, 12);
   });
 
@@ -38,13 +44,23 @@ describe("fuse", () => {
   });
 
   it("keeps every chunk once and honours topK", () => {
-    const fused = fuse({ lexical: list("a", "b", "c"), vector: list("c", "a") }, { topK: 2 });
+    const fused = fuse(
+      { lexical: list("a", "b", "c"), vector: list("c", "a") },
+      { weights: FUSION_WEIGHTS.withReranker, topK: 2 },
+    );
     expect(fused).toHaveLength(2);
     expect(new Set(fused.map((h) => h.chunk.id)).size).toBe(2);
   });
 
   it("handles an empty list from one search", () => {
-    const fused = fuse({ lexical: [], vector: list("a", "b") });
+    const fused = fuse({ lexical: [], vector: list("a", "b") }, { weights: FUSION_WEIGHTS.withReranker });
     expect(fused.map((h) => h.chunk.id)).toEqual(["a", "b"]);
+  });
+
+  it("refuses to fuse without weights, rather than scoring everything NaN", () => {
+    // The type says required; this is the JavaScript caller who ignored it.
+    expect(() => fuse({ lexical: list("a"), vector: list("b") }, {} as never)).toThrow(
+      /weights are required/,
+    );
   });
 });

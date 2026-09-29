@@ -8,6 +8,7 @@ import {
   chunkDocument,
   embedText,
   fuse,
+  FUSION_WEIGHTS,
   loadFiles,
   MemoryStore,
   parseDocument,
@@ -84,7 +85,7 @@ async function measure(store) {
     const fused = fuse({
       lexical: await store.lexicalSearch(NAMESPACE, question.q, 20),
       vector: await store.vectorSearch(NAMESPACE, vector, 20),
-    });
+    }, { weights: FUSION_WEIGHTS.withReranker });
     const scores = await reranker.score(
       question.q,
       fused.map((hit) => chunkTexts.get(hit.chunk.id)),

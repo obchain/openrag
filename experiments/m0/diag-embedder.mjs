@@ -9,6 +9,7 @@ import {
   chunkDocument,
   embedText,
   fuse,
+  FUSION_WEIGHTS,
   loadFiles,
   parseDocument,
   planUpdate,
@@ -131,7 +132,7 @@ for (const question of answerable) {
   const hits = fuse({
     lexical: await store.lexicalSearch(NAMESPACE, question.q, 20),
     vector: await store.vectorSearch(NAMESPACE, vector, 20),
-  });
+  }, { weights: FUSION_WEIGHTS.withReranker });
   const scores = await reranker.score(
     question.q,
     hits.map((hit) => chunkTexts.get(hit.chunk.id)),
